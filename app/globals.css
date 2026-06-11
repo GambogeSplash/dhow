@@ -1,26 +1,135 @@
 @import "tailwindcss";
 
+/*
+  Dhow design language
+  --------------------
+  Light, operator-grade, trade-ledger sensibility. No dark mode (app-wide cohesion).
+  Palette: chart-paper white, indigo ink, verdigris teal (settle/trust), brass (value moments).
+  Type: Spectral (display, ledger gravitas) / Geist Sans (UI) / Geist Mono (figures, tx, hashes).
+*/
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* surfaces */
+  --paper: #faf8f3;          /* warm chart-paper background */
+  --surface: #ffffff;        /* cards */
+  --surface-sunk: #f3f0e9;   /* wells, insets */
+  --line: #e7e2d6;           /* hairlines on paper */
+  --line-strong: #d6cfbd;
+
+  /* ink */
+  --ink: #11202e;            /* primary text, indigo-black */
+  --ink-2: #3c4a57;          /* secondary */
+  --ink-3: #6b7682;          /* muted */
+  --ink-faint: #9aa3ac;
+
+  /* verdigris — settle, trust, the rails */
+  --teal: #0c7c66;
+  --teal-deep: #095a4a;
+  --teal-tint: #e3f1ec;
+
+  /* brass — value, capital, the money moment */
+  --brass: #b07d28;
+  --brass-deep: #8a611c;
+  --brass-tint: #f6edd9;
+
+  /* states */
+  --pending: #b07d28;        /* locked / awaiting proof = brass */
+  --pending-tint: #f6edd9;
+  --danger: #b03a2e;
+  --danger-tint: #f6e3df;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-teal: var(--teal);
+  --color-teal-deep: var(--teal-deep);
+  --color-teal-tint: var(--teal-tint);
+
+  --color-brass: var(--brass);
+  --color-brass-deep: var(--brass-deep);
+  --color-brass-tint: var(--brass-tint);
+
+  --color-pending: var(--pending);
+  --color-pending-tint: var(--pending-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+
+  --font-display: var(--font-spectral);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --radius-card: var(--radius);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--line);
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv01";
+}
+
+/* tabular figures everywhere numbers matter */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* display serif */
+.font-display {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+/* hairline rule that reads like ledger paper */
+.rule {
+  height: 1px;
+  background: var(--line);
+}
+
+/* subtle paper grain via layered gradients, very low contrast */
+.paper-grain {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(17, 32, 46, 0.02) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+::selection {
+  background: var(--teal-tint);
+  color: var(--teal-deep);
+}
+
+@keyframes dhow-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: dhow-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes dhow-count {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
 }

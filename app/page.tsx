@@ -1,65 +1,153 @@
-import Image from "next/image";
+import Link from "next/link";
+import { DhowMark } from "@/components/DhowMark";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="paper-grain flex flex-1 flex-col">
+      {/* top bar */}
+      <header className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
+        <div className="flex items-center gap-2.5">
+          <DhowMark className="h-6 w-6 text-teal" />
+          <span className="font-display text-lg font-medium tracking-tight">
+            Dhow
+          </span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <Link
+          href="/send"
+          className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-ink-2"
+        >
+          Open the demo
+        </Link>
+      </header>
+
+      {/* hero */}
+      <section className="mx-auto w-full max-w-6xl px-6 pb-16 pt-16 sm:pt-24">
+        <p className="flex items-center gap-2 text-sm text-teal-deep">
+          <span className="h-1.5 w-1.5 rounded-full bg-teal" />
+          Cross-border settlement on Polygon · DIFC
+        </p>
+        <h1 className="font-display mt-5 max-w-3xl text-5xl leading-[1.05] tracking-tight sm:text-6xl">
+          Settlement that makes the{" "}
+          <span className="italic text-teal-deep">unfundable</span> legible.
+        </h1>
+        <p className="mt-6 max-w-xl text-lg text-ink-2">
+          Dhow settles supplier payments in stablecoin in minutes, not days.
+          Every settlement writes a verified on-chain cashflow record that turns
+          a trade history into creditworthiness.
+        </p>
+        <p className="mt-4 max-w-xl text-ink-3">
+          We don&apos;t ask anyone to digitise trade. We pay their suppliers,
+          and the ledger falls out.
+        </p>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <Link
+            href="/send"
+            className="rounded-full bg-teal px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-teal-deep"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Walk the 90-second flow →
+          </Link>
+          <span className="text-sm text-ink-faint">
+            Pay → settle → score → capital, in one screen.
+          </span>
         </div>
-      </main>
+      </section>
+
+      {/* the loop */}
+      <section className="border-y border-line bg-surface">
+        <div className="mx-auto grid w-full max-w-6xl gap-px bg-line sm:grid-cols-3">
+          <Step
+            n="01"
+            title="Pay the supplier"
+            body="Open settlement or a Proof-Lock that escrows on-chain and releases when shipment proof is attested."
+          />
+          <Step
+            n="02"
+            title="The record writes itself"
+            body="Each settled corridor lifts a Corridor Score — a transparent function of volume, proof performance and cadence."
+          />
+          <Step
+            n="03"
+            title="Capital unlocks"
+            body="Cross the threshold and Dhow surfaces you to financiers. They fund the cashflow they can see, not an attestation they must trust."
+          />
+        </div>
+      </section>
+
+      {/* moats */}
+      <section className="mx-auto w-full max-w-6xl px-6 py-16">
+        <h2 className="font-display text-2xl tracking-tight">
+          Why this holds where others didn&apos;t
+        </h2>
+        <p className="mt-2 max-w-2xl text-ink-2">
+          The bank consortia died asking corporates to change behaviour with no
+          payment hook. The flywheel works because the payment comes first.
+        </p>
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <Moat
+            head="Wedge inversion"
+            body="Lead with the payment; the verified ledger is exhaust, not a product we sell."
+          />
+          <Moat
+            head="Cashflow as the primitive"
+            body="We underwrite on payments we settled ourselves — data no one can fabricate or source."
+          />
+          <Moat
+            head="Marketplace, not balance sheet"
+            body="We match de-risked SMEs to financiers and take a fee. Capital-light, and the banks become our demand side."
+          />
+          <Moat
+            head="Compliant perimeter"
+            body="DIFC-domiciled settlement in native USDC on a sub-cent chain, over an under-served corridor."
+          />
+        </div>
+      </section>
+
+      {/* figures */}
+      <section className="border-t border-line bg-surface">
+        <div className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-px bg-line sm:grid-cols-4">
+          <Figure big="$2.5T" sub="global trade-finance gap (ADB)" />
+          <Figure big="41%" sub="SME applications rejected, vs 7% for multinationals" />
+          <Figure big="~51%" sub="of UAE crypto activity is stablecoins" />
+          <Figure big="~$0.002" sub="to settle a payment on Polygon" />
+        </div>
+      </section>
+
+      <footer className="mx-auto w-full max-w-6xl px-6 py-10">
+        <div className="flex items-center gap-2 text-sm text-ink-3">
+          <DhowMark className="h-4 w-4 text-ink-faint" />
+          Dhow · built for the Smart Commerce Infrastructure Challenge
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function Step({ n, title, body }: { n: string; title: string; body: string }) {
+  return (
+    <div className="bg-surface px-6 py-8">
+      <p className="tnum font-mono text-xs text-teal">{n}</p>
+      <p className="mt-3 font-display text-lg">{title}</p>
+      <p className="mt-2 text-sm text-ink-3">{body}</p>
+    </div>
+  );
+}
+
+function Moat({ head, body }: { head: string; body: string }) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
+      <p className="font-medium">{head}</p>
+      <p className="mt-2 text-sm text-ink-3">{body}</p>
+    </div>
+  );
+}
+
+function Figure({ big, sub }: { big: string; sub: string }) {
+  return (
+    <div className="bg-surface px-6 py-8">
+      <p className="font-display tnum text-3xl tracking-tight text-ink">
+        {big}
+      </p>
+      <p className="mt-1 text-sm text-ink-3">{sub}</p>
     </div>
   );
 }

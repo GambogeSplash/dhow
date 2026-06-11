@@ -1,0 +1,4 @@
+# secrets & local-only chain config (deploy runs in simulation mode)
+.env*
+# Foundry workspace is not part of the Next.js build
+contracts

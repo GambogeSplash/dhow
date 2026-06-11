@@ -1,0 +1,9 @@
+# Foundry build artifacts
+cache/
+out/
+
+# Broadcast logs (local/anvil deployment records)
+broadcast/
+
+# Docs
+docs/
