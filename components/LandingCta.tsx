@@ -11,7 +11,7 @@ export function LandingCta() {
 
   function explore() {
     enterSample();
-    router.push("/corridor");
+    router.push("/overview");
   }
 
   return (

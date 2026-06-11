@@ -28,7 +28,7 @@ export default function OnboardingPage() {
   // doesn't short-circuit the remaining supplier/wallet steps.
   useEffect(() => {
     if (hydrated && isAuthenticated && isOnboarded && step === "signin") {
-      router.replace("/corridor");
+      router.replace("/overview");
     }
   }, [hydrated, isAuthenticated, isOnboarded, step, router]);
 
@@ -44,7 +44,7 @@ export default function OnboardingPage() {
   function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     const { onboarded } = signIn(email);
-    if (onboarded) router.replace("/corridor");
+    if (onboarded) router.replace("/overview");
     else setStep("business");
   }
 
@@ -182,7 +182,7 @@ export default function OnboardingPage() {
             )}
 
             <button
-              onClick={() => router.replace("/send")}
+              onClick={() => router.replace("/overview")}
               disabled={!business?.walletAddress}
               className="mt-3 w-full rounded-full bg-teal py-3 text-sm font-medium text-white transition-colors hover:bg-teal-deep disabled:cursor-not-allowed disabled:opacity-40"
             >
