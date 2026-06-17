@@ -34,7 +34,7 @@ contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
 
     IERC20 public immutable token;
     address public attester; // the inspector authorised to attest shipment proof
-    address public owner;
+    // address public owner; // @GambogeSplash This is already defined in the Ownable contract, so is redundant.
 
     mapping(bytes32 => Lock) public locks;
 
@@ -58,8 +58,8 @@ contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
         // owner = msg.sender; // @GambogeSplash This is already set in the Ownable constructor, so is redundant.
     }
 
-    function setAttester(address attester_) external {
-        require(msg.sender == owner, "not owner");
+    function setAttester(address attester_) external onlyOwner{
+        // require(msg.sender == owner, "not owner"); @GambogeSplash This check is now redundant, as the onlyOwner modifier already ensures that only the owner can call this function.
         attester = attester_;
         emit AttesterChanged(attester_);
     }
