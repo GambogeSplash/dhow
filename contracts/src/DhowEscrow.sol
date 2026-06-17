@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24; //@GambogeSplash nitpick: use a pinned compiler version
+
+
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
-}
+} 
 
 /// @title DhowEscrow — Proof-Lock conditional settlement.
 /// @notice Holds USDC for a corridor and releases to the supplier when the
 ///         shipment proof is attested. In production the attester check is an
 ///         EAS attestation; here it is an attester role. Buyer is refunded
 ///         after the deadline if no proof arrives.
-contract DhowEscrow {
+contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
     enum Status {
         None,
         Locked,
@@ -40,17 +45,17 @@ contract DhowEscrow {
     event Refunded(bytes32 indexed corridorId, address indexed payer, uint256 amount);
     event AttesterChanged(address indexed attester);
 
-    modifier nonReentrant() {
-        require(_guard == 1, "reentrant");
-        _guard = 2;
-        _;
-        _guard = 1;
-    }
+    // modifier nonReentrant() {
+    //     require(_guard == 1, "reentrant");
+    //     _guard = 2;
+    //     _;
+    //     _guard = 1;
+    // } //@GambogeSplash This modifier is now redundant, contract now uses the OZ import instead.
 
-    constructor(address token_, address attester_) {
+    constructor(address token_, address attester_) Ownable(msg.sender) {
         token = IERC20(token_);
         attester = attester_;
-        owner = msg.sender;
+        // owner = msg.sender; // @GambogeSplash This is already set in the Ownable constructor, so is redundant.
     }
 
     function setAttester(address attester_) external {
