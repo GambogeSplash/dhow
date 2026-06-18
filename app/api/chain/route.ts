@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Hex } from "viem";
 import {
   ChainAction,
   getChainConfig,
@@ -6,6 +7,11 @@ import {
 } from "@/lib/chain";
 
 export const runtime = "nodejs";
+
+// Legacy "attest" maps to the new "release" action so existing callers keep working.
+function normalizeAction(a: string): ChainAction {
+  return a === "attest" ? "release" : (a as ChainAction);
+}
 
 function synthHash(): string {
   const hex = "0123456789abcdef";
@@ -17,14 +23,14 @@ function synthHash(): string {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { action?: ChainAction; ref?: string; amountUsdc?: number };
+  let body: { action?: string; ref?: string; amountUsdc?: number; attestationUid?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "bad json" }, { status: 400 });
   }
 
-  const { action, ref, amountUsdc } = body;
+  const { action, ref, amountUsdc, attestationUid } = body;
   if (!action || !ref) {
     return NextResponse.json({ error: "missing action/ref" }, { status: 400 });
   }
@@ -41,7 +47,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const txHash = await runChainAction(cfg, action, ref, amountUsdc ?? 0);
+    const txHash = await runChainAction(
+      cfg,
+      normalizeAction(action),
+      ref,
+      amountUsdc ?? 0,
+      attestationUid ? (attestationUid as Hex) : undefined,
+    );
     return NextResponse.json({
       mode: "chain",
       txHash,
