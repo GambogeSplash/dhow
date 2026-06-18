@@ -26,7 +26,8 @@ The competitive map has three camps and the top-right quadrant is empty: payment
 
 ## Regulatory posture (this reshaped the product — get it right)
 
-- **No AED stablecoin is on Polygon.** AE Coin runs on permissioned Hyperledger Besu. So: **settle in native USDC on Polygon, use AED purely as the display / quote / invoicing currency.**
+- **No AED stablecoin is on Polygon (yet).** AE Coin runs on permissioned Hyperledger Besu. So: **settle in native USDC on Polygon, use AED purely as the display / quote / invoicing currency.**
+- **Watch (May 2026):** AE Coin (CBUAE-licensed AED) and USDU (FSRA/ADGM-regulated USD) announced a regulated AED–USD conversion rail, framed as the first step toward UAE-originated trade-finance stablecoin infrastructure, and are exploring integration with cross-border trade-finance fintechs. RAKBank also received approval for an AED-backed stablecoin. Implication: the regulated AED settlement layer is arriving now. This is a tailwind (the "why now": rails finally exist for a compliant on-chain flywheel, and a licensed AED token may later settle natively) and a watch-item (if that infrastructure picks a partner for the credit layer, that partner is a competitor). Does not break the thesis; revisit the "USDC-only, AED display-only" stance with counsel as the AED-token rails mature.
 - **We are not under PTSR.** Onshore UAE merchant stablecoin acceptance requires a licensed AED token + licensed PSP — but PTSR **excludes the DIFC/ADGM free zones**. A DIFC-domiciled cross-border B2B trade-finance settlement product sits under **DFSA**.
 - **Compliance story = DFSA Innovation Testing Licence (ITL) sandbox + AML/CTF**, not "PTSR-compliant merchant acceptance." Never claim PTSR compliance.
 - **Never say "world's first comprehensive stablecoin regulation"** (MiCA precedes it). Never say "letter of credit." Never say "we lend."
