@@ -76,6 +76,10 @@ interface WorkspaceState {
 
 const Ctx = createContext<WorkspaceState | null>(null);
 
+// In demo mode the Proof-Lock auto-attests so the on-stage flow never stalls
+// on a manual click; the attestation is still real when the chain is wired.
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "1";
+
 type ChainAction = "pay" | "lock" | "attest" | "refund";
 
 /** Calls the server chain route. Resolves to a tx hash (real on-chain, or a
@@ -313,6 +317,24 @@ export function CorridorProvider({ children }: { children: React.ReactNode }) {
     },
     [now, patch],
   );
+
+  // Demo mode: a freshly locked Proof-Lock attests itself after a short beat,
+  // so the score lift lands without a manual click mid-demo.
+  const autoAttested = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!DEMO_MODE) return;
+    const pending = corridors.find(
+      (c) =>
+        c.mode === "prooflock" &&
+        c.status === "locked" &&
+        c.proof?.status === "awaiting" &&
+        !autoAttested.current.has(c.id),
+    );
+    if (!pending) return;
+    autoAttested.current.add(pending.id);
+    const t = setTimeout(() => attest(pending.id), 2200);
+    return () => clearTimeout(t);
+  }, [corridors, attest]);
 
   const refund = useCallback(
     (id: string) => {

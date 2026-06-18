@@ -147,7 +147,9 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
     setFacilities(loadFacilities());
     refresh();
     // Poll localStorage so the financier sees the importer's live moves (other tab).
-    const id = setInterval(refresh, 2500);
+    // Tighter in demo mode so the opportunity surfaces almost immediately on stage.
+    const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "1";
+    const id = setInterval(refresh, demoMode ? 1000 : 2500);
     const onStorage = () => refresh();
     window.addEventListener("storage", onStorage);
     return () => {
