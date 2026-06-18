@@ -39,13 +39,20 @@ Dhow settles in **native USDC on Polygon**, with **AED used as the quote and dis
 
 ## What's in this repo
 
-A working product, not slideware. A real user can sign up and run their own business through it:
+A working product, not slideware, and the settlement is real on-chain, not mocked.
 
+**The importer side** — a real user signs up and runs their business through it:
 - **Onboarding and accounts.** Sign in, name your business, add suppliers, connect a wallet. Each account is its own workspace.
 - **Send.** Pay a supplier with a chosen settlement mode and live FX.
 - **Corridor Record.** The Corridor Score with its full derivation, and a ledger of settled, in-flight, refunded, and disputed corridors.
 - **Capital.** The working-capital offer, and the financier's view of the borrower they would otherwise reject.
-- **Escrow contracts.** A Foundry workspace with `DhowEscrow` (lock, attest-release, timeout-refund, reentrancy-guarded) and `MockUSDC`, with a passing test suite.
+
+**The financier side** — the marketplace's demand side (`app/(financier)`): a desk, an opportunity feed of scored borrowers, a deal view that underwrites against verified corridors, and a fund action that moves capital. A borrower surfaces here the moment their on-chain Corridor Score crosses the eligibility threshold.
+
+**The on-chain layer** — a Foundry workspace settling for real:
+- **`DhowEscrow`** — Proof-Lock conditional settlement. Release is gated on a real **EAS attestation** of the shipment proof (right schema, not revoked, signed by the trusted inspector, bound to the corridor), permissionless once a valid attestation exists. OZ `Ownable`/`ReentrancyGuard`/`SafeERC20`, custom errors, and an owner fallback for stage resilience.
+- **`DhowScoreRegistry`** — the Corridor Score posted on-chain per business, so the financier reads `scoreOf`/`isEligible` directly from chain rather than trusting a database.
+- **`MockUSDC`** plus a minimal EAS-compatible attestation contract, with a passing test suite (15 tests) and a clean deploy script.
 
 There are two ways in: **Start free** for the real onboarding, or **Explore with sample data** to see the whole flywheel in one click.
 
@@ -53,26 +60,38 @@ There are two ways in: **Start free** for the real onboarding, or **Explore with
 
 | Layer | Where | Role |
 | --- | --- | --- |
-| Scoring engine | `lib/corridor.ts` | Pure, chain-agnostic. Corridor Score and advance sizing as transparent functions of settled corridors. |
+| Scoring engine | `lib/corridor.ts` | Pure, chain-agnostic. Corridor Score and advance sizing as transparent functions of settled corridors. Shared by client and server. |
 | Account layer | `lib/account.ts` | Per-user identity, business, suppliers, wallet, and the sample workspace. Where a real auth provider and database swap in. |
-| Workspace store | `components/CorridorProvider.tsx` | Client state and actions (pay, attest, refund, retry, accept offer). Optimistic update, then patches the real tx hash. |
-| Chain layer | `lib/chain.ts`, `app/api/chain/route.ts` | Server-only viem signer. An action becomes a real Polygon transaction, or a simulated hash when no chain is configured, so it always runs. |
-| Surfaces | `app/onboarding`, `app/(app)/{overview,send,corridor,capital,suppliers}` | The product, behind a real account. |
+| Importer store | `components/CorridorProvider.tsx` | Client state and actions. Settling a Proof-Lock runs the full chain: create the EAS attestation, release against it, post the lifted score on-chain. |
+| Financier store | `components/FinancierProvider.tsx` | The demand side. Derives borrowers, overlays the on-chain verified score, and funds with a real transfer. |
+| Chain layer | `lib/chain.ts`, `lib/eas.ts`, `lib/indexer.ts` | Server-only viem signer. Settlement, EAS attestation, on-chain score read/post, funding, and an event indexer. Env-gated: real Polygon tx when configured, simulated hash otherwise, so it always runs. |
+| API | `app/api/{chain,attest,score,fund,corridors}` | The server boundary the UI calls for every on-chain action. |
+| Contracts | `contracts/src/{DhowEscrow,DhowScoreRegistry,MockUSDC}.sol` | EAS-gated escrow and the on-chain credit registry. |
+| Surfaces | `app/onboarding`, `app/(app)/*`, `app/(financier)/*` | The two-sided product, behind real accounts. |
 
-Stack: Next.js, React, Tailwind v4, TypeScript, viem, Foundry. Design language is a light, operator-grade trade-ledger: chart-paper and indigo ink, verdigris teal for trust, brass for value moments, Spectral and Geist with tabular figures.
+Stack: Next.js, React, Tailwind v4, TypeScript, viem, Foundry, EAS. Design language is a light, operator-grade trade-ledger: chart-paper and indigo ink, verdigris teal for trust, brass for value moments, Spectral and Geist with tabular figures.
 
-## Run it
+For the full technical walkthrough, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). To run it locally end to end, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-```bash
-npm install --legacy-peer-deps
-npm run dev
-cd contracts && forge test
-```
+## Maturity
 
-With no chain configured, settlement runs in simulation so the full flow works out of the box. On-chain settlement on Polygon Amoy is env-gated; the recipe is in `docs/CHAIN.md`.
+An honest read, because the gaps are the roadmap.
+
+| Stage | State |
+| --- | --- |
+| Thesis validated | Done. The wedge, the marketplace model, and the regulatory posture are reasoned through and citation-backed in `docs/research/`. |
+| Working two-sided product | Done. Importer and financier surfaces, real onboarding, the full flywheel clickable. |
+| Real on-chain settlement | Done and verified end to end on a real chain: lock → EAS attestation → attestation-gated release → on-chain Corridor Score → financier funding, each a real transaction, confirmed by independent chain reads. 15 contract tests pass. |
+| Public testnet (Amoy) | Partial. USDC + the attestation contract are deployed on Amoy; the escrow + registry deploy and the public Polygonscan demo are gated on funding a burner with test POL. |
+| Production | Not yet, by design. |
+
+Simplified for the demo, and where a real build goes next: auth and persistence are localStorage (no database or Privy yet); a single server-side burner acts as payer, inspector, and score poster (no per-user signing or decentralised oracle); the attestation contract is an EAS-compatible stand-in until canonical EAS is wired; USDC is an open-mint testnet token, not Circle USDC on mainnet. No KYC/AML, no real financier onboarding, single repayment only, contracts unaudited, and no real users. The thesis is proven by the live flywheel, not by breadth or scale.
 
 ## Docs
 
-- [`docs/BRIEF.md`](docs/BRIEF.md) product spec
+- [`docs/EXPLAINER.md`](docs/EXPLAINER.md) plain-language idea, use case, and demo scenario (start here)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) how the system fits together, layer by layer
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) run it locally, the on-chain flow, deploy, conventions
+- [`docs/BRIEF.md`](docs/BRIEF.md) canonical product spec
 - [`docs/CHAIN.md`](docs/CHAIN.md) on-chain settlement recipe
 - [`docs/research/`](docs/research) regulation, Polygon stack, trade-finance benchmarks, competitive landscape
