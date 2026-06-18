@@ -240,6 +240,19 @@ export async function runChainAction(
   return hash;
 }
 
+/** Financier funding: a real USDC transfer from the burner to a business wallet. */
+export async function transferUsdc(cfg: ChainConfig, to: Hex, amountUsdc: number): Promise<Hex> {
+  const { wallet, pub } = clients(cfg);
+  const hash = await wallet.writeContract({
+    address: cfg.usdc,
+    abi: USDC_ABI,
+    functionName: "transfer",
+    args: [to, parseUnits(String(amountUsdc), 6)],
+  });
+  await pub.waitForTransactionReceipt({ hash });
+  return hash;
+}
+
 /** Post a freshly computed Corridor Score for a business to the on-chain registry. */
 export async function postScoreOnChain(
   cfg: ChainConfig,
