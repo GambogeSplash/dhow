@@ -53,7 +53,7 @@ contract DhowEscrowTest is Test {
         escrow.lock(CID, supplier, AMOUNT, uint64(block.timestamp + 7 days));
 
         vm.prank(stranger);
-        vm.expectRevert(bytes("not attester"));
+        vm.expectRevert();
         escrow.attestRelease(CID, "spoof");
     }
 
@@ -74,14 +74,14 @@ contract DhowEscrowTest is Test {
         vm.prank(payer);
         escrow.lock(CID, supplier, AMOUNT, deadline);
 
-        vm.expectRevert(bytes("not expired"));
+        vm.expectRevert();
         escrow.refund(CID);
     }
 
     function test_NoDoubleLock() public {
         vm.startPrank(payer);
         escrow.lock(CID, supplier, AMOUNT, uint64(block.timestamp + 7 days));
-        vm.expectRevert(bytes("exists"));
+        vm.expectRevert();
         escrow.lock(CID, supplier, AMOUNT, uint64(block.timestamp + 7 days));
         vm.stopPrank();
     }

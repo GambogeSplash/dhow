@@ -3,7 +3,7 @@ pragma solidity 0.8.24; //@GambogeSplash nitpick: use a pinned compiler version
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+// import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -17,7 +17,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 ///         shipment proof is attested. In production the attester check is an
 ///         EAS attestation; here it is an attester role. Buyer is refunded
 ///         after the deadline if no proof arrives.
-contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
+contract DhowEscrow is Ownable, /*AccessControl,*/ ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -33,6 +33,7 @@ contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
     error DhowEscrow__InvalidAmount();
     /// @dev This error is thrown when the status of a lock is not locked.
     error DhowEscrow__StatusNotLocked();
+    error DhowEscrow__DeadlineNotPassed();
     
 
     /*//////////////////////////////////////////////////////////////
@@ -125,10 +126,11 @@ contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
         if (supplier == address(0)) {
             revert DhowEscrow__InvalidSupplierAddress();
         }
-        if (amount <= 0) {
+        if (amount == 0) {
             revert DhowEscrow__InvalidAmount();
         }
-        require(token.transferFrom(msg.sender, address(this), amount), "pull failed");
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+
 
         locks[corridorId] =
             Lock({payer: msg.sender, supplier: supplier, amount: amount, deadline: deadline, status: Status.Locked});
@@ -147,7 +149,10 @@ contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
         }
 
         l.status = Status.Released;
-        require(token.transfer(l.supplier, l.amount), "release failed");
+
+        IERC20(token).safeTransfer(l.supplier, l.amount);
+
+
 
         emit Released(corridorId, l.supplier, l.amount, proofRef);
     }
@@ -158,10 +163,13 @@ contract DhowEscrow is Ownable, AccessControl, ReentrancyGuard {
         if (l.status != Status.Locked) {
             revert DhowEscrow__StatusNotLocked();
         }
-        require(block.timestamp > l.deadline, "not expired");
+        if (block.timestamp <= l.deadline) {
+            revert DhowEscrow__DeadlineNotPassed();
+        }
 
         l.status = Status.Refunded;
-        require(token.transfer(l.payer, l.amount), "refund failed");
+
+        IERC20(token).safeTransfer(l.payer, l.amount);
 
         emit Refunded(corridorId, l.payer, l.amount);
     }
