@@ -62,8 +62,8 @@ export default function CorridorPage() {
           </div>
 
           <div className="mt-6 space-y-3 border-t border-line pt-5">
-            {score.factors.map((f) => (
-              <FactorRow key={f.key} f={f} />
+            {score.factors.map((f, i) => (
+              <FactorRow key={f.key} f={f} index={i} />
             ))}
           </div>
         </div>
@@ -133,7 +133,7 @@ function EmptyLedger() {
   );
 }
 
-function FactorRow({ f }: { f: ScoreFactor }) {
+function FactorRow({ f, index = 0 }: { f: ScoreFactor; index?: number }) {
   const pct = (f.points / f.max) * 100;
   return (
     <div>
@@ -148,7 +148,7 @@ function FactorRow({ f }: { f: ScoreFactor }) {
         <div className="h-1.5 flex-1 rounded-full bg-surface-sunk">
           <div
             className="h-1.5 rounded-full bg-teal/70 transition-[width] duration-700 ease-out"
-            style={{ width: `${pct}%` }}
+            style={{ width: `${pct}%`, transitionDelay: `${index * 120}ms` }}
           />
         </div>
         <span className="w-40 shrink-0 text-right text-xs text-ink-faint">{f.detail}</span>
