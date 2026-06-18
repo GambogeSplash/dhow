@@ -266,7 +266,7 @@ export function CorridorProvider({ children }: { children: React.ReactNode }) {
         settledAt: settledImmediately ? t : undefined,
         proof:
           input.mode === "prooflock"
-            ? { status: "awaiting", label: "Bill of lading — Jebel Ali inbound" }
+            ? { status: "awaiting", label: "Bill of lading · Jebel Ali inbound" }
             : undefined,
         createdAt: t,
         txState: "pending",

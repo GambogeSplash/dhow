@@ -52,7 +52,7 @@ export default function Home() {
           <Step
             n="02"
             title="The record writes itself"
-            body="Each settled corridor lifts a Corridor Score — a transparent function of volume, proof performance and cadence."
+            body="Each settled corridor lifts a Corridor Score, a transparent function of volume, proof performance and cadence."
           />
           <Step
             n="03"
@@ -78,7 +78,7 @@ export default function Home() {
           />
           <Moat
             head="Cashflow as the primitive"
-            body="We underwrite on payments we settled ourselves — data no one can fabricate or source."
+            body="We underwrite on payments we settled ourselves. Data no one can fabricate or source."
           />
           <Moat
             head="Marketplace, not balance sheet"

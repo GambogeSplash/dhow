@@ -22,7 +22,7 @@ export default function CapitalPage() {
           <p className="mt-4 font-medium">Not yet unlocked</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
             Capital unlocks once your Corridor Score crosses{" "}
-            {ELIGIBLE_THRESHOLD}. You&apos;re at {score.score} — settle another
+            {ELIGIBLE_THRESHOLD}. You&apos;re at {score.score}. Settle another
             corridor to get there.
           </p>
           <Link
@@ -98,7 +98,7 @@ export default function CapitalPage() {
       <section>
         <p className="text-sm text-ink-3">What {financier.name} sees</p>
         <h2 className="font-display mt-1 text-2xl tracking-tight">
-          A borrower banks reject — made legible
+          A borrower banks reject, made legible
         </h2>
         <p className="mt-2 text-ink-2">{financier.blurb}</p>
 

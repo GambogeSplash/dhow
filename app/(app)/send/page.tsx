@@ -127,7 +127,7 @@ export default function SendPage() {
               name="goods"
               value={goods}
               onChange={(e) => setGoods(e.target.value)}
-              placeholder="e.g. Auto components — 2 × 40ft"
+              placeholder="e.g. Auto components, 2 × 40ft"
               className="mt-1.5 w-full rounded-[var(--radius-sm)] border border-line bg-surface px-3.5 py-2.5 text-ink outline-none placeholder:text-ink-faint focus:border-teal focus:ring-1 focus:ring-teal"
             />
           </label>

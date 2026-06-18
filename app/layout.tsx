@@ -21,7 +21,7 @@ const spectral = Spectral({
 });
 
 export const metadata: Metadata = {
-  title: "Dhow — settlement that makes the unfundable legible",
+  title: "Dhow · settlement that makes the unfundable legible",
   description:
     "Dhow settles cross-border supplier payments in stablecoin on Polygon, in minutes. Every settlement writes a verified on-chain cashflow record that turns transaction history into creditworthiness.",
 };

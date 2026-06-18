@@ -110,7 +110,7 @@ export default function OnboardingPage() {
             />
             <Submit disabled={!email.trim()}>Continue</Submit>
             <p className="mt-4 text-center text-xs text-ink-faint">
-              New here or returning — we&apos;ll take you to the right place.
+              New here or returning, we&apos;ll take you to the right place.
             </p>
             <p className="mt-6 text-center text-sm text-ink-3">
               Just looking?{" "}
@@ -125,7 +125,7 @@ export default function OnboardingPage() {
           <form onSubmit={handleBusiness}>
             <h1 className="font-display text-3xl tracking-tight">Your business</h1>
             <p className="mt-2 text-ink-2">
-              This is the importer on record — the borrower a financier sees.
+              This is the importer on record, the borrower a financier sees.
             </p>
             <Field label="Business name" required value={bizName} onChange={setBizName} placeholder="e.g. Al Noor Trading" autoFocus />
             <div className="grid grid-cols-2 gap-3">
@@ -159,8 +159,8 @@ export default function OnboardingPage() {
           <div>
             <h1 className="font-display text-3xl tracking-tight">Connect a wallet</h1>
             <p className="mt-2 text-ink-2">
-              Settlements move in USDC on Polygon. Connect a wallet to settle from
-              — your supplier is paid directly, on-chain.
+              Settlements move in USDC on Polygon. Connect a wallet to settle
+              from, and your supplier is paid directly, on-chain.
             </p>
 
             {business?.walletAddress ? (
