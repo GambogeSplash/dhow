@@ -80,7 +80,7 @@ const Ctx = createContext<WorkspaceState | null>(null);
 // on a manual click; the attestation is still real when the chain is wired.
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "1";
 
-type ChainAction = "pay" | "lock" | "attest" | "refund";
+type ChainAction = "pay" | "lock" | "release" | "refund";
 
 /** Calls the server chain route. Resolves to a tx hash (real on-chain, or a
  *  simulated one when unconfigured). A missing hash means the settlement request
@@ -89,18 +89,51 @@ async function postChain(
   action: ChainAction,
   ref: string,
   amountUsdc: number,
+  attestationUid?: string,
 ): Promise<{ txHash?: string; explorerUrl?: string }> {
   try {
     const res = await fetch("/api/chain", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, ref, amountUsdc }),
+      body: JSON.stringify({ action, ref, amountUsdc, attestationUid }),
     });
     if (!res.ok) return {};
     const data = await res.json();
     return { txHash: data.txHash, explorerUrl: data.explorerUrl ?? undefined };
   } catch {
     return {};
+  }
+}
+
+/** Create the shipment-proof attestation; returns its uid (+ receipt). */
+async function postAttest(
+  ref: string,
+  supplier?: string,
+): Promise<{ uid?: string; explorerUrl?: string }> {
+  try {
+    const res = await fetch("/api/attest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ref, supplier }),
+    });
+    if (!res.ok) return {};
+    const data = await res.json();
+    return { uid: data.uid, explorerUrl: data.explorerUrl ?? undefined };
+  } catch {
+    return {};
+  }
+}
+
+/** Post the freshly computed Corridor Score for a business to the on-chain registry. */
+async function postScore(business: string, score: number, attestationUid?: string): Promise<void> {
+  try {
+    await fetch("/api/score", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ business, score, attestationUid }),
+    });
+  } catch {
+    /* registry not wired; the score still reconciles from the client */
   }
 }
 
@@ -310,12 +343,25 @@ export function CorridorProvider({ children }: { children: React.ReactNode }) {
           ? { ...target.proof, status: "attested", attestedBy: "Gulf Inspectorate" }
           : undefined,
       });
-      postChain("attest", target.ref, target.amountUsdc).then(
-        ({ txHash, explorerUrl }) =>
-          patch(id, { txHash, explorerUrl, txState: txHash ? "confirmed" : "failed" }),
-      );
+      // Full chain: attest the shipment proof, release against that attestation,
+      // then post the freshly lifted score on-chain so the financier reads it.
+      (async () => {
+        const wallet = business?.walletAddress;
+        const { uid } = await postAttest(target.ref, wallet);
+        const { txHash, explorerUrl } = await postChain(
+          "release",
+          target.ref,
+          target.amountUsdc,
+          uid,
+        );
+        patch(id, { txHash, explorerUrl, txState: txHash ? "confirmed" : "failed" });
+        if (wallet) {
+          const fresh = scoreCorridors(corridorsRef.current, now).score;
+          void postScore(wallet, fresh, uid);
+        }
+      })();
     },
-    [now, patch],
+    [now, patch, business],
   );
 
   // Demo mode: a freshly locked Proof-Lock attests itself after a short beat,
@@ -367,7 +413,7 @@ export function CorridorProvider({ children }: { children: React.ReactNode }) {
             ? "lock"
             : c.mode === "open"
               ? "pay"
-              : "attest";
+              : "release";
       patch(id, { txState: "pending" });
       postChain(action, c.ref, c.amountUsdc).then(({ txHash, explorerUrl }) =>
         patch(id, { txHash, explorerUrl, txState: txHash ? "confirmed" : "failed" }),
