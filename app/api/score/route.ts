@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Hex } from "viem";
-import { getChainConfig, readScoreOnChain } from "@/lib/chain";
+import { getChainConfig, postScoreOnChain, readScoreOnChain } from "@/lib/chain";
 
 export const runtime = "nodejs";
 
@@ -31,6 +31,49 @@ export async function GET(req: NextRequest) {
       business,
       score: null,
       eligible: null,
+      error: err instanceof Error ? err.message : "chain error",
+    });
+  }
+}
+
+/*
+ * Post a freshly computed Corridor Score for a business to the on-chain
+ * registry after a settlement. The score is computed by the pure engine
+ * (lib/corridor) on the client that holds the corridor history; this records
+ * it on-chain so the financier reads a verifiable number.
+ */
+export async function POST(req: NextRequest) {
+  let body: { business?: string; score?: number; attestationUid?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "bad json" }, { status: 400 });
+  }
+
+  const { business, score, attestationUid } = body;
+  if (!business || typeof score !== "number") {
+    return NextResponse.json({ error: "missing business/score" }, { status: 400 });
+  }
+
+  const cfg = getChainConfig();
+  if (!cfg || !cfg.registry) {
+    return NextResponse.json({ mode: "sim", txHash: null, explorerUrl: null });
+  }
+
+  try {
+    const uid = (attestationUid as Hex) ?? ("0x" + "0".repeat(64));
+    const txHash = await postScoreOnChain(cfg, business as Hex, Math.round(score), uid as Hex);
+    return NextResponse.json({
+      mode: "chain",
+      txHash,
+      explorerUrl: txHash ? `${cfg.explorerBase}${txHash}` : null,
+    });
+  } catch (err) {
+    console.error("score post failed", err);
+    return NextResponse.json({
+      mode: "sim",
+      txHash: null,
+      explorerUrl: null,
       error: err instanceof Error ? err.message : "chain error",
     });
   }

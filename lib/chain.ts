@@ -24,6 +24,9 @@ export interface ChainConfig {
   escrow: Hex;
   supplier: Hex;
   registry?: Hex; // DhowScoreRegistry (on-chain credit reputation)
+  eas?: Hex; // attestation contract (canonical EAS or our registry)
+  shipmentSchema?: Hex; // shipment-proof schema uid
+  inspectorKey?: Hex; // signer that attests shipment proof (defaults to signerKey)
   chainId: number;
   explorerBase: string; // e.g. https://amoy.polygonscan.com/tx/
 }
@@ -36,6 +39,9 @@ export function getChainConfig(): ChainConfig | null {
     DHOW_ESCROW_ADDRESS,
     DHOW_SUPPLIER_ADDRESS,
     DHOW_REGISTRY_ADDRESS,
+    DHOW_EAS_ADDRESS,
+    DHOW_SHIPMENT_SCHEMA,
+    DHOW_INSPECTOR_KEY,
     DHOW_CHAIN_ID,
     DHOW_EXPLORER_BASE,
   } = process.env;
@@ -57,6 +63,9 @@ export function getChainConfig(): ChainConfig | null {
     escrow: DHOW_ESCROW_ADDRESS as Hex,
     supplier: DHOW_SUPPLIER_ADDRESS as Hex,
     registry: DHOW_REGISTRY_ADDRESS ? (DHOW_REGISTRY_ADDRESS as Hex) : undefined,
+    eas: DHOW_EAS_ADDRESS ? (DHOW_EAS_ADDRESS as Hex) : undefined,
+    shipmentSchema: DHOW_SHIPMENT_SCHEMA ? (DHOW_SHIPMENT_SCHEMA as Hex) : undefined,
+    inspectorKey: DHOW_INSPECTOR_KEY ? (DHOW_INSPECTOR_KEY as Hex) : (DHOW_SIGNER_KEY as Hex),
     chainId: Number(DHOW_CHAIN_ID ?? 80002),
     explorerBase: DHOW_EXPLORER_BASE ?? "https://amoy.polygonscan.com/tx/",
   };
