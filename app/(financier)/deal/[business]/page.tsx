@@ -20,7 +20,7 @@ export default function DealPage() {
     return (
       <div className="mx-auto max-w-lg py-16 text-center">
         <p className="font-medium">Borrower not found</p>
-        <p className="mt-1 text-sm text-ink-3">It may not have settled a corridor in this session yet.</p>
+        <p className="mt-1 text-sm text-ink-3">It may not have settled a payment in this session yet.</p>
         <Link href="/opportunities" className="mt-5 inline-block text-sm text-brass-deep underline underline-offset-2">
           Back to opportunities
         </Link>
@@ -55,7 +55,7 @@ export default function DealPage() {
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_1.1fr]">
         <section>
-          <h2 className="mb-3 text-sm font-medium text-ink-2">Corridor Score</h2>
+          <h2 className="mb-3 text-sm font-medium text-ink-2">Credit Score</h2>
           <ScoreCard score={borrower.score} verifiedOnChain={borrower.onchainScore !== null} />
 
           <div className="mt-4 rounded-[var(--radius-card)] border border-line bg-surface p-5">
@@ -85,7 +85,7 @@ export default function DealPage() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-sm font-medium text-ink-2">Verified corridors</h2>
+          <h2 className="mb-3 text-sm font-medium text-ink-2">Verified settlements</h2>
           <div className="space-y-3">
             {settled.map((c) => (
               <div key={c.id} className="rounded-[var(--radius-card)] border border-line bg-surface p-4">

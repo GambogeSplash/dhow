@@ -19,7 +19,7 @@ import { FINANCIER } from "@/lib/seed";
 /*
  * The financier (Creek Capital) side. Read-mostly: it derives borrowers from
  * the importer's persisted workspace (same-origin localStorage, so a two-window
- * demo shows live updates) and overlays the on-chain Corridor Score from the
+ * demo shows live updates) and overlays the on-chain Credit Score from the
  * registry via /api/score when the chain is wired. The only write is funding,
  * which is a real USDC transfer when the chain is configured.
  */

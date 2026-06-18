@@ -32,7 +32,7 @@ export default function OverviewPage() {
       {/* metrics */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric
-          label="Corridor Score"
+          label="Credit Score"
           value={`${score.score}`}
           suffix="/100"
           foot={<span className="capitalize">{score.tier}</span>}
@@ -41,7 +41,7 @@ export default function OverviewPage() {
         <Metric
           label="Settled volume"
           value={aed(score.trailingValueAed)}
-          foot={`${score.settledCount} settled corridor${score.settledCount === 1 ? "" : "s"}`}
+          foot={`${score.settledCount} settlement${score.settledCount === 1 ? "" : "s"}`}
         />
         <Metric
           label="Working capital"
@@ -65,7 +65,7 @@ export default function OverviewPage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-medium text-ink-2">Recent activity</h2>
           <Link href="/corridor" className="text-sm text-teal-deep hover:underline">
-            View Corridor Record →
+            View Cashflow Record →
           </Link>
         </div>
 
@@ -74,7 +74,7 @@ export default function OverviewPage() {
             <p className="font-medium">Make your first payment</p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
               Pay a supplier in stablecoin and the record starts writing itself.
-              Each settled corridor lifts your Corridor Score.
+              Each settlement lifts your Credit Score.
             </p>
             <Link
               href="/send"

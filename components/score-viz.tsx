@@ -4,7 +4,7 @@ import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { CorridorScore, ELIGIBLE_THRESHOLD, ScoreFactor } from "@/lib/corridor";
 
 /*
- * Shared Corridor Score visualisation, used by both the importer's Corridor
+ * Shared Credit Score visualisation, used by both the importer's Corridor
  * Record and the financier's deal view so the two personas read the same
  * number in the same visual language.
  */

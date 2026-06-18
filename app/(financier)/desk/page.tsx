@@ -32,8 +32,8 @@ export default function DeskPage() {
         <div className="mt-3 rounded-[var(--radius-card)] border border-dashed border-line-strong bg-surface p-8 text-center">
           <p className="font-medium">No eligible borrowers yet</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
-            Borrowers appear here the moment their on-chain Corridor Score crosses {ELIGIBLE_THRESHOLD}.
-            They settle a corridor, the score lifts, and the opportunity surfaces, live.
+            Borrowers appear here the moment their on-chain Credit Score crosses {ELIGIBLE_THRESHOLD}.
+            They settle a payment, the score lifts, and the opportunity surfaces, live.
           </p>
         </div>
       ) : (

@@ -21,7 +21,7 @@ export default function CapitalPage() {
           </div>
           <p className="mt-4 font-medium">Not yet unlocked</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
-            Capital unlocks once your Corridor Score crosses{" "}
+            Capital unlocks once your Credit Score crosses{" "}
             {ELIGIBLE_THRESHOLD}. You&apos;re at {score.score}. Settle another
             corridor to get there.
           </p>
@@ -29,7 +29,7 @@ export default function CapitalPage() {
             href="/corridor"
             className="mt-5 inline-block rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-paper"
           >
-            View Corridor Record →
+            View Cashflow Record →
           </Link>
         </div>
       </div>
@@ -64,7 +64,7 @@ export default function CapitalPage() {
 
           <dl className="divide-y divide-line px-6">
             <Term k="Facility" v="Single-shipment advance" />
-            <Term k="Against" v={`${score.settledCount} settled corridors`} />
+            <Term k="Against" v={`${score.settledCount} settlements`} />
             <Term k="Fee" v="1.5% on draw · repaid from next settlement" />
             <Term k="Risk" v="Carried by Creek Capital, not Dhow" />
           </dl>
@@ -114,7 +114,7 @@ export default function CapitalPage() {
               <p className="tnum font-display text-2xl text-teal-deep">
                 {score.score}
               </p>
-              <p className="text-xs text-ink-faint">Corridor Score</p>
+              <p className="text-xs text-ink-faint">Credit Score</p>
             </div>
           </div>
 
@@ -128,7 +128,7 @@ export default function CapitalPage() {
               value={`${Math.round(score.proofMetRatio * 100)}% clean`}
             />
             <Metric
-              label="Avg corridor"
+              label="Avg settlement"
               value={aed(score.avgCorridorAed)}
             />
             <Metric

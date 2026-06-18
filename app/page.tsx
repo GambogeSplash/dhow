@@ -52,7 +52,7 @@ export default function Home() {
           <Step
             n="02"
             title="The record writes itself"
-            body="Each settled corridor lifts a Corridor Score, a transparent function of volume, proof performance and cadence."
+            body="Each settlement lifts a Credit Score, a transparent function of volume, proof performance and cadence."
           />
           <Step
             n="03"
@@ -86,7 +86,7 @@ export default function Home() {
           />
           <Moat
             head="Compliant perimeter"
-            body="DIFC-domiciled settlement in native USDC on a sub-cent chain, over an under-served corridor."
+            body="DIFC-domiciled settlement in native USDC on a sub-cent chain, over an under-served trade route."
           />
         </div>
       </section>

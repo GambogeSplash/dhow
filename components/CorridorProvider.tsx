@@ -124,7 +124,7 @@ async function postAttest(
   }
 }
 
-/** Post the freshly computed Corridor Score for a business to the on-chain registry. */
+/** Post the freshly computed Credit Score for a business to the on-chain registry. */
 async function postScore(business: string, score: number, attestationUid?: string): Promise<void> {
   try {
     await fetch("/api/score", {

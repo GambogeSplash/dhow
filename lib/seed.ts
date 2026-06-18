@@ -28,7 +28,7 @@ function corridor(c: Omit<Corridor, "amountUsdc">): Corridor {
   return { ...c, amountUsdc: makeCorridorUsdc(c.amountAed) };
 }
 
-/** Initial ledger: two prior settled corridors. `now` injected for stable timing. */
+/** Initial ledger: two prior settlements. `now` injected for stable timing. */
 export function initialCorridors(now: number): Corridor[] {
   return [
     corridor({

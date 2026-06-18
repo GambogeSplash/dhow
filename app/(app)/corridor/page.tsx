@@ -41,10 +41,10 @@ export default function CorridorPage() {
     <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
       {/* score */}
       <section>
-        <p className="text-sm text-ink-3">Corridor Record</p>
-        <h1 className="font-display mt-1 text-3xl tracking-tight">Corridor Score</h1>
+        <p className="text-sm text-ink-3">Cashflow Record</p>
+        <h1 className="font-display mt-1 text-3xl tracking-tight">Credit Score</h1>
         <p className="mt-2 text-ink-2">
-          Built only from settled corridors. This is the number a financier
+          Built only from settlements. This is the number a financier
           underwrites against.
         </p>
 
@@ -93,7 +93,7 @@ export default function CorridorPage() {
             <div>
               <p className="font-medium text-brass-deep">Working capital unlocked</p>
               <p className="text-sm text-ink-3">
-                {aed(offerAed)} available against this corridor.
+                {aed(offerAed)} available against this settlement.
               </p>
             </div>
             <span className="rounded-full bg-brass px-4 py-2 text-sm font-medium text-white">
@@ -135,9 +135,9 @@ export default function CorridorPage() {
 function EmptyLedger() {
   return (
     <div className="rounded-[var(--radius-card)] border border-dashed border-line-strong bg-surface p-8 text-center">
-      <p className="font-medium">No corridors yet</p>
+      <p className="font-medium">No settlements yet</p>
       <p className="mx-auto mt-1 max-w-xs text-sm text-ink-3">
-        Pay your first supplier to start building a Corridor Score. Each settled
+        Pay your first supplier to start building a Credit Score. Each settled
         payment lifts the number a financier underwrites against.
       </p>
       <Link

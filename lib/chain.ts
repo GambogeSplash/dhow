@@ -262,7 +262,7 @@ export async function transferUsdc(cfg: ChainConfig, to: Hex, amountUsdc: number
   return hash;
 }
 
-/** Post a freshly computed Corridor Score for a business to the on-chain registry. */
+/** Post a freshly computed Credit Score for a business to the on-chain registry. */
 export async function postScoreOnChain(
   cfg: ChainConfig,
   business: Hex,

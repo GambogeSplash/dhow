@@ -12,8 +12,8 @@ export default function PortfolioPage() {
       <p className="text-sm text-ink-3">Portfolio</p>
       <h1 className="font-display mt-1 text-3xl tracking-tight">Facilities</h1>
       <p className="mt-2 max-w-xl text-ink-2">
-        Capital deployed against verified corridors. The facility stays safe while the borrower keeps
-        settling on Dhow: the loan is repaid out of the next settled corridor.
+        Capital deployed against verified settlements. The facility stays safe while the borrower keeps
+        settling on Dhow: the loan is repaid out of the next settlement.
       </p>
 
       {facilities.length === 0 ? (

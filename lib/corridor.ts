@@ -1,7 +1,7 @@
 /*
  * Dhow corridor engine
  * --------------------
- * The underwriting primitive, in code. A Corridor Score is a transparent
+ * The underwriting primitive, in code. A Credit Score is a transparent
  * function of REAL settled payments — so a working-capital offer can be shown
  * to derive from settlements, not asserted. Keep this pure and chain-agnostic;
  * the Polygon settlement layer swaps in at the edges (txHash, on-chain proof).
@@ -138,7 +138,7 @@ export function scoreCorridors(
     {
       key: "history",
       label: "Settled history",
-      detail: `${settledCount} settled corridor${settledCount === 1 ? "" : "s"}`,
+      detail: `${settledCount} settlement${settledCount === 1 ? "" : "s"}`,
       points: round1((Math.min(settledCount, 6) / 6) * 30),
       max: 30,
     },
@@ -189,7 +189,7 @@ export function scoreCorridors(
 
 /**
  * Working-capital advance sized to bridge one typical shipment's cash gap.
- * A fraction of the average settled corridor, scaled by score tier. Capital-light:
+ * A fraction of the average settlement, scaled by score tier. Capital-light:
  * Dhow surfaces this to a financier; it does not lend its own balance sheet.
  */
 export function advanceOffer(s: CorridorScore): number {

@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 /*
  * Chain-derived read API. The financier polls this for a business's verified
- * on-chain Corridor Score: they underwrite the cashflow they can see on-chain,
+ * on-chain Credit Score: they underwrite the cashflow they can see on-chain,
  * not an attestation they have to trust. Falls back to mode "sim" when the
  * chain (or registry) isn't wired, so the two-screen demo still runs.
  */
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 }
 
 /*
- * Post a freshly computed Corridor Score for a business to the on-chain
+ * Post a freshly computed Credit Score for a business to the on-chain
  * registry after a settlement. The score is computed by the pure engine
  * (lib/corridor) on the client that holds the corridor history; this records
  * it on-chain so the financier reads a verifiable number.

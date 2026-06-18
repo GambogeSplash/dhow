@@ -197,7 +197,7 @@ export default function SendPage() {
 
       <p className="mt-6 text-center text-sm text-ink-faint">
         <Link href="/corridor" className="underline underline-offset-2 hover:text-ink-3">
-          View your Corridor Record
+          View your Cashflow Record
         </Link>
       </p>
     </div>

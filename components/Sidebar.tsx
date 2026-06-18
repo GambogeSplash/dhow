@@ -9,7 +9,7 @@ import { DhowMark } from "./DhowMark";
 const NAV = [
   { href: "/overview", label: "Overview", icon: GridIcon },
   { href: "/send", label: "Send payment", icon: SendIcon },
-  { href: "/corridor", label: "Corridor Record", icon: LedgerIcon },
+  { href: "/corridor", label: "Cashflow Record", icon: LedgerIcon },
   { href: "/capital", label: "Capital", icon: CoinIcon },
   { href: "/suppliers", label: "Suppliers", icon: UsersIcon },
 ];
@@ -74,7 +74,7 @@ export function Sidebar() {
           href="/corridor"
           className="flex items-center justify-between rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-2.5 transition-colors hover:border-line-strong"
         >
-          <span className="text-xs text-ink-3">Corridor Score</span>
+          <span className="text-xs text-ink-3">Credit Score</span>
           <span className="tnum font-display text-lg leading-none text-ink">
             {score.score}
             <span className="text-xs text-ink-faint">/100</span>
