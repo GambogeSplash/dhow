@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { useCorridor } from "@/components/CorridorProvider";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import {
@@ -15,6 +16,22 @@ export default function CorridorPage() {
   const { corridors, score, prevScore, attest, refund, retry, offerAed } =
     useCorridor();
   const crossedNow = prevScore < ELIGIBLE_THRESHOLD && score.eligible;
+
+  // Pulse the factor(s) whose points just rose, so the score lift is legible.
+  const prevPoints = useRef<Record<string, number>>({});
+  const [movedKeys, setMovedKeys] = useState<string[]>([]);
+  useEffect(() => {
+    const moved: string[] = [];
+    for (const f of score.factors) {
+      const before = prevPoints.current[f.key];
+      if (before !== undefined && f.points > before + 0.01) moved.push(f.key);
+      prevPoints.current[f.key] = f.points;
+    }
+    if (moved.length === 0) return;
+    setMovedKeys(moved);
+    const t = setTimeout(() => setMovedKeys([]), 1400);
+    return () => clearTimeout(t);
+  }, [score]);
 
   const ledger = [...corridors].sort(
     (a, b) => (b.settledAt ?? b.createdAt) - (a.settledAt ?? a.createdAt),
@@ -45,7 +62,7 @@ export default function CorridorPage() {
           </div>
 
           <div className="mt-6">
-            <div className="relative h-2 rounded-full bg-surface-sunk">
+            <div className={`relative h-2 rounded-full bg-surface-sunk ${crossedNow ? "meter-celebrate" : ""}`}>
               <div
                 className="absolute inset-y-0 left-0 rounded-full bg-teal transition-[width] duration-700 ease-out"
                 style={{ width: `${score.score}%` }}
@@ -62,8 +79,8 @@ export default function CorridorPage() {
           </div>
 
           <div className="mt-6 space-y-3 border-t border-line pt-5">
-            {score.factors.map((f) => (
-              <FactorRow key={f.key} f={f} />
+            {score.factors.map((f, i) => (
+              <FactorRow key={f.key} f={f} index={i} moved={movedKeys.includes(f.key)} />
             ))}
           </div>
         </div>
@@ -133,10 +150,10 @@ function EmptyLedger() {
   );
 }
 
-function FactorRow({ f }: { f: ScoreFactor }) {
+function FactorRow({ f, index = 0, moved = false }: { f: ScoreFactor; index?: number; moved?: boolean }) {
   const pct = (f.points / f.max) * 100;
   return (
-    <div>
+    <div className={moved ? "factor-moved" : undefined}>
       <div className="flex items-baseline justify-between text-sm">
         <span className="text-ink-2">{f.label}</span>
         <span className="tnum font-mono text-xs text-ink-3">
@@ -148,7 +165,7 @@ function FactorRow({ f }: { f: ScoreFactor }) {
         <div className="h-1.5 flex-1 rounded-full bg-surface-sunk">
           <div
             className="h-1.5 rounded-full bg-teal/70 transition-[width] duration-700 ease-out"
-            style={{ width: `${pct}%` }}
+            style={{ width: `${pct}%`, transitionDelay: `${index * 120}ms` }}
           />
         </div>
         <span className="w-40 shrink-0 text-right text-xs text-ink-faint">{f.detail}</span>

@@ -23,6 +23,10 @@ export interface ChainConfig {
   usdc: Hex;
   escrow: Hex;
   supplier: Hex;
+  registry?: Hex; // DhowScoreRegistry (on-chain credit reputation)
+  eas?: Hex; // attestation contract (canonical EAS or our registry)
+  shipmentSchema?: Hex; // shipment-proof schema uid
+  inspectorKey?: Hex; // signer that attests shipment proof (defaults to signerKey)
   chainId: number;
   explorerBase: string; // e.g. https://amoy.polygonscan.com/tx/
 }
@@ -34,6 +38,10 @@ export function getChainConfig(): ChainConfig | null {
     DHOW_USDC_ADDRESS,
     DHOW_ESCROW_ADDRESS,
     DHOW_SUPPLIER_ADDRESS,
+    DHOW_REGISTRY_ADDRESS,
+    DHOW_EAS_ADDRESS,
+    DHOW_SHIPMENT_SCHEMA,
+    DHOW_INSPECTOR_KEY,
     DHOW_CHAIN_ID,
     DHOW_EXPLORER_BASE,
   } = process.env;
@@ -54,6 +62,10 @@ export function getChainConfig(): ChainConfig | null {
     usdc: DHOW_USDC_ADDRESS as Hex,
     escrow: DHOW_ESCROW_ADDRESS as Hex,
     supplier: DHOW_SUPPLIER_ADDRESS as Hex,
+    registry: DHOW_REGISTRY_ADDRESS ? (DHOW_REGISTRY_ADDRESS as Hex) : undefined,
+    eas: DHOW_EAS_ADDRESS ? (DHOW_EAS_ADDRESS as Hex) : undefined,
+    shipmentSchema: DHOW_SHIPMENT_SCHEMA ? (DHOW_SHIPMENT_SCHEMA as Hex) : undefined,
+    inspectorKey: DHOW_INSPECTOR_KEY ? (DHOW_INSPECTOR_KEY as Hex) : (DHOW_SIGNER_KEY as Hex),
     chainId: Number(DHOW_CHAIN_ID ?? 80002),
     explorerBase: DHOW_EXPLORER_BASE ?? "https://amoy.polygonscan.com/tx/",
   };
@@ -87,13 +99,30 @@ const ESCROW_ABI = [
   },
   {
     type: "function",
-    name: "attestRelease",
+    name: "releaseWithAttestation",
     stateMutability: "nonpayable",
     inputs: [
       { name: "corridorId", type: "bytes32" },
-      { name: "proofRef", type: "string" },
+      { name: "attestationUid", type: "bytes32" },
     ],
     outputs: [],
+  },
+  {
+    type: "function",
+    name: "releaseByInspector",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "corridorId", type: "bytes32" },
+      { name: "proofRef", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "requireEas",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
   },
   {
     type: "function",
@@ -104,7 +133,37 @@ const ESCROW_ABI = [
   },
 ] as const;
 
-export type ChainAction = "pay" | "lock" | "attest" | "refund";
+const REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "postScore",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "business", type: "address" },
+      { name: "score", type: "uint16" },
+      { name: "attestationUid", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "scoreOf",
+    stateMutability: "view",
+    inputs: [{ name: "business", type: "address" }],
+    outputs: [{ type: "uint16" }],
+  },
+  {
+    type: "function",
+    name: "isEligible",
+    stateMutability: "view",
+    inputs: [{ name: "business", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+] as const;
+
+// "release" settles a Proof-Lock: via EAS attestation when one is supplied,
+// otherwise via the inspector fallback (used when requireEas is off).
+export type ChainAction = "pay" | "lock" | "release" | "refund";
 
 function clients(cfg: ChainConfig) {
   const chain = defineChain({
@@ -123,12 +182,22 @@ export function corridorId(ref: string): Hex {
   return keccak256(toBytes(ref));
 }
 
-/** Executes the action on-chain and waits for the receipt. Returns the tx hash. */
+/** A read-only public client for indexing/score reads (no signer needed). */
+export function publicClient(cfg: ChainConfig) {
+  return clients(cfg).pub;
+}
+
+/**
+ * Executes a settlement action on-chain and waits for the receipt.
+ * For "release", pass an EAS `attestationUid` to settle against a real
+ * attestation; omit it to fall back to the inspector path (requireEas off).
+ */
 export async function runChainAction(
   cfg: ChainConfig,
   action: ChainAction,
   ref: string,
   amountUsdc: number,
+  attestationUid?: Hex,
 ): Promise<Hex> {
   const { wallet, pub } = clients(cfg);
   const cid = corridorId(ref);
@@ -158,15 +227,70 @@ export async function runChainAction(
       functionName: "refund",
       args: [cid],
     });
-  } else {
+  } else if (attestationUid) {
+    // Release against a real EAS shipment-proof attestation (permissionless).
     hash = await wallet.writeContract({
       address: cfg.escrow,
       abi: ESCROW_ABI,
-      functionName: "attestRelease",
-      args: [cid, "Bill of lading - Jebel Ali inbound"],
+      functionName: "releaseWithAttestation",
+      args: [cid, attestationUid],
+    });
+  } else {
+    // Inspector fallback when EAS is unavailable. proofRef is a free bytes32 tag.
+    hash = await wallet.writeContract({
+      address: cfg.escrow,
+      abi: ESCROW_ABI,
+      functionName: "releaseByInspector",
+      args: [cid, keccak256(toBytes(`proof:${ref}`))],
     });
   }
 
   await pub.waitForTransactionReceipt({ hash });
   return hash;
+}
+
+/** Financier funding: a real USDC transfer from the burner to a business wallet. */
+export async function transferUsdc(cfg: ChainConfig, to: Hex, amountUsdc: number): Promise<Hex> {
+  const { wallet, pub } = clients(cfg);
+  const hash = await wallet.writeContract({
+    address: cfg.usdc,
+    abi: USDC_ABI,
+    functionName: "transfer",
+    args: [to, parseUnits(String(amountUsdc), 6)],
+  });
+  await pub.waitForTransactionReceipt({ hash });
+  return hash;
+}
+
+/** Post a freshly computed Corridor Score for a business to the on-chain registry. */
+export async function postScoreOnChain(
+  cfg: ChainConfig,
+  business: Hex,
+  score: number,
+  attestationUid: Hex,
+): Promise<Hex | null> {
+  if (!cfg.registry) return null;
+  const { wallet, pub } = clients(cfg);
+  const hash = await wallet.writeContract({
+    address: cfg.registry,
+    abi: REGISTRY_ABI,
+    functionName: "postScore",
+    args: [business, score, attestationUid],
+  });
+  await pub.waitForTransactionReceipt({ hash });
+  return hash;
+}
+
+/** Read a business's on-chain score + eligibility from the registry. */
+export async function readScoreOnChain(
+  cfg: ChainConfig,
+  business: Hex,
+): Promise<{ score: number; eligible: boolean } | null> {
+  if (!cfg.registry) return null;
+  const pub = publicClient(cfg);
+  const [score, eligible] = await Promise.all([
+    pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "scoreOf", args: [business] }),
+    pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "isEligible", args: [business] }),
+  ]);
+  return { score: Number(score), eligible: Boolean(eligible) };
 }
