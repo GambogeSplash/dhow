@@ -155,8 +155,13 @@ export function scoreCorridors(
       label: "Proof performance",
       detail: prooflockResolved.length
         ? `${prooflockClean.length}/${prooflockResolved.length} released clean`
-        : "no disputes",
-      points: round1(proofMetRatio * 30),
+        : settledCount
+          ? "no disputes"
+          : "—",
+      // Clean-performance points are EARNED by settling at least once. A brand-new
+      // business with no settlements has no track record, so it scores 0 here
+      // rather than getting full marks for the absence of disputes.
+      points: round1((settledCount > 0 ? proofMetRatio : 0) * 30),
       max: 30,
     },
     {
