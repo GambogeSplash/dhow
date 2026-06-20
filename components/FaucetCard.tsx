@@ -3,17 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { getAccessToken } from "@privy-io/react-auth";
 import type { Hex } from "viem";
-import { useWorkspace } from "./CorridorProvider";
 import { chainConfigured, readBalances } from "@/lib/chain-client";
 
 /*
  * Testnet wallet funding. A fresh embedded wallet has no gas or USDC, so it
  * can't settle. This reads the balance and, when low, lets the user top up from
  * the operator faucet in one tap — the friction-remover that makes a live demo
- * "sign a real on-chain payment" actually work for a brand-new wallet.
+ * "sign a real on-chain payment" actually work for a brand-new wallet. Works for
+ * both the importer and financier wallets (pass whichever address).
  */
-export function FaucetCard() {
-  const { walletAddress } = useWorkspace();
+export function FaucetCard({ walletAddress }: { walletAddress?: string }) {
   const [bal, setBal] = useState<{ pol: number; usdc: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);

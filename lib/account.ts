@@ -148,3 +148,42 @@ export async function apiCreateCorridor(
 export async function apiPatchCorridor(token: string, id: string, patch: CorridorPatch): Promise<void> {
   await call(token, "/api/corridors", { method: "PATCH", body: { id, patch } });
 }
+
+// ---- facilities (financier side) ----
+
+export interface FacilityDTO {
+  id: string;
+  borrowerId: string;
+  borrowerName: string;
+  amountAed: number;
+  amountUsdc: number;
+  txHash?: string;
+  explorerUrl?: string;
+  repaid: boolean;
+  fundedAt: number;
+}
+
+export async function apiListFacilities(token: string): Promise<FacilityDTO[]> {
+  const { facilities } = await call<{ facilities: FacilityDTO[] }>(token, "/api/facilities");
+  return facilities;
+}
+
+export async function apiCreateFacility(
+  token: string,
+  f: {
+    id: string;
+    borrowerId: string;
+    borrowerName: string;
+    amountAed: number;
+    amountUsdc: number;
+    txHash?: string;
+    explorerUrl?: string;
+    fundedAt: number;
+  },
+): Promise<void> {
+  await call(token, "/api/facilities", { method: "POST", body: f });
+}
+
+export async function apiMarkRepaid(token: string, borrowerId: string): Promise<void> {
+  await call(token, "/api/facilities", { method: "PATCH", body: { borrowerId } });
+}

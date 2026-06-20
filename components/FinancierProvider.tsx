@@ -1,21 +1,26 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { usePrivy, useWallets, getAccessToken } from "@privy-io/react-auth";
+import type { EIP1193Provider, Hex } from "viem";
 import {
   advanceOffer,
+  AED_PER_USD,
   Corridor,
   CorridorScore,
   scoreCorridors,
 } from "@/lib/corridor";
 import type { Business } from "@/lib/account";
+import { apiListFacilities, apiCreateFacility, apiMarkRepaid } from "@/lib/account";
 import { FINANCIER } from "@/lib/financier";
+import { CHAIN_ID, payOpen } from "@/lib/chain-client";
 
 /*
- * The financier (Creek Capital) side. Read-mostly: borrowers come from the
- * shared database via /api/borrowers (cross-machine, real), and the on-chain
- * verified Credit Score is overlaid from the registry via /api/score. Funding
- * is recorded as a local commitment ledger for now; financier-wallet-signed
- * on-chain disbursement is the next layer.
+ * The financier (Creek Capital) side. Borrowers come from the shared database
+ * via /api/borrowers (real, cross-machine), with the on-chain verified Credit
+ * Score overlaid from the registry. Funding is a REAL on-chain USDC transfer
+ * the financier signs from their own Privy wallet to the borrower's wallet; the
+ * facility (with its settlement tx) persists in the database.
  */
 
 export interface Borrower {
@@ -27,7 +32,7 @@ export interface Borrower {
   corridors: Corridor[];
   score: CorridorScore;
   offerAed: number;
-  onchainScore: number | null; // verified score from the registry, when available
+  onchainScore: number | null;
 }
 
 export interface Facility {
@@ -46,12 +51,13 @@ interface FinancierState {
   facilities: Facility[];
   deployedAed: number;
   availableAed: number;
-  fund: (borrower: Borrower) => Promise<void>;
+  isAuthenticated: boolean;
+  walletAddress?: string;
+  login: () => void;
+  fund: (borrower: Borrower) => Promise<{ ok: boolean; error?: string }>;
   markRepaid: (borrowerId: string) => void;
   refresh: () => void;
 }
-
-const FACILITIES_KEY = "dhow.financier.facilities.v1";
 
 function isFullAddress(a?: string): boolean {
   return !!a && /^0x[0-9a-fA-F]{40}$/.test(a);
@@ -77,28 +83,61 @@ function toBorrower(
   };
 }
 
-function loadFacilities(): Facility[] {
+function newFacilityId(): string {
   try {
-    const raw = localStorage.getItem(FACILITIES_KEY);
-    return raw ? (JSON.parse(raw) as Facility[]) : [];
+    return `fac_${crypto.randomUUID().slice(0, 8)}`;
   } catch {
-    return [];
-  }
-}
-
-function saveFacilities(f: Facility[]) {
-  try {
-    localStorage.setItem(FACILITIES_KEY, JSON.stringify(f));
-  } catch {
-    /* storage blocked; facilities live in memory for this tab */
+    return `fac_${Math.random().toString(36).slice(2, 10)}`;
   }
 }
 
 const Ctx = createContext<FinancierState | null>(null);
 
 export function FinancierProvider({ children }: { children: React.ReactNode }) {
+  const { ready, authenticated, login } = usePrivy();
+  const { wallets } = useWallets();
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
+
+  const walletsRef = useRef(wallets);
+  walletsRef.current = wallets;
+  const embedded = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
+  const isAuthenticated = ready && authenticated;
+
+  const token = useCallback(async () => (await getAccessToken()) ?? "", []);
+
+  const signer = useCallback(async (): Promise<{ provider: EIP1193Provider; from: Hex }> => {
+    const w = walletsRef.current.find((x) => x.walletClientType === "privy") ?? walletsRef.current[0];
+    if (!w) throw new Error("Connect a wallet to fund.");
+    try {
+      await w.switchChain(CHAIN_ID);
+    } catch {
+      /* already on chain */
+    }
+    return { provider: (await w.getEthereumProvider()) as EIP1193Provider, from: w.address as Hex };
+  }, []);
+
+  const loadFacilities = useCallback(async () => {
+    if (!authenticated) return setFacilities([]);
+    try {
+      const t = await token();
+      if (!t) return;
+      const rows = await apiListFacilities(t);
+      setFacilities(
+        rows.map((f) => ({
+          borrowerId: f.borrowerId,
+          borrowerName: f.borrowerName,
+          amountAed: f.amountAed,
+          fundedAt: f.fundedAt,
+          txHash: f.txHash,
+          explorerUrl: f.explorerUrl,
+          repaid: f.repaid,
+        })),
+      );
+    } catch {
+      /* not configured / unauthenticated */
+    }
+  }, [authenticated, token]);
 
   const refresh = useCallback(() => {
     void (async () => {
@@ -114,7 +153,6 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
       const base = records.map((r) => toBorrower(r.business, r.corridors, now, null));
       setBorrowers(base);
 
-      // Overlay the on-chain verified score where a real wallet + registry exist.
       base.forEach(async (b, i) => {
         if (!isFullAddress(b.wallet)) return;
         try {
@@ -128,55 +166,98 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
             });
           }
         } catch {
-          /* registry not wired; the derived score stands */
+          /* registry not wired */
         }
       });
     })();
   }, []);
 
   useEffect(() => {
-    setFacilities(loadFacilities());
     refresh();
     const id = setInterval(refresh, 4000);
-    const onStorage = () => refresh();
-    window.addEventListener("storage", onStorage);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener("storage", onStorage);
-    };
+    return () => clearInterval(id);
   }, [refresh]);
 
-  const fund = useCallback(async (borrower: Borrower) => {
-    // Records the financier's commitment. Real financier-wallet-signed USDC
-    // disbursement to the borrower is the next layer.
-    const facility: Facility = {
-      borrowerId: borrower.id,
-      borrowerName: borrower.name,
-      amountAed: borrower.offerAed,
-      fundedAt: Date.now(),
-      repaid: false,
-    };
-    setFacilities((prev) => {
-      const next = [...prev.filter((f) => f.borrowerId !== borrower.id), facility];
-      saveFacilities(next);
-      return next;
-    });
-  }, []);
+  useEffect(() => {
+    void loadFacilities();
+  }, [loadFacilities]);
 
-  const markRepaid = useCallback((borrowerId: string) => {
-    setFacilities((prev) => {
-      const next = prev.map((f) => (f.borrowerId === borrowerId ? { ...f, repaid: true } : f));
-      saveFacilities(next);
-      return next;
-    });
-  }, []);
+  const fund = useCallback(
+    async (borrower: Borrower): Promise<{ ok: boolean; error?: string }> => {
+      if (!authenticated) {
+        login();
+        return { ok: false, error: "Connect your financier wallet to fund." };
+      }
+      if (!isFullAddress(borrower.wallet)) {
+        return { ok: false, error: "Borrower has no settlement wallet address yet." };
+      }
+      if (borrower.offerAed <= 0) return { ok: false, error: "No eligible offer." };
+
+      const amountUsdc = Math.round((borrower.offerAed / AED_PER_USD) * 100) / 100;
+      try {
+        const { provider, from } = await signer();
+        const res = await payOpen(provider, from, borrower.wallet as Hex, amountUsdc);
+        const facility: Facility = {
+          borrowerId: borrower.id,
+          borrowerName: borrower.name,
+          amountAed: borrower.offerAed,
+          fundedAt: Date.now(),
+          txHash: res.txHash,
+          explorerUrl: res.explorerUrl,
+          repaid: false,
+        };
+        setFacilities((prev) => [...prev.filter((f) => f.borrowerId !== borrower.id), facility]);
+        const t = await token();
+        if (t)
+          await apiCreateFacility(t, {
+            id: newFacilityId(),
+            borrowerId: borrower.id,
+            borrowerName: borrower.name,
+            amountAed: borrower.offerAed,
+            amountUsdc,
+            txHash: res.txHash,
+            explorerUrl: res.explorerUrl,
+            fundedAt: facility.fundedAt,
+          }).catch(() => {});
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : "funding failed" };
+      }
+    },
+    [authenticated, login, signer, token],
+  );
+
+  const markRepaid = useCallback(
+    (borrowerId: string) => {
+      setFacilities((prev) =>
+        prev.map((f) => (f.borrowerId === borrowerId ? { ...f, repaid: true } : f)),
+      );
+      void (async () => {
+        const t = await token();
+        if (t) await apiMarkRepaid(t, borrowerId).catch(() => {});
+      })();
+    },
+    [token],
+  );
 
   const deployedAed = facilities.filter((f) => !f.repaid).reduce((s, f) => s + f.amountAed, 0);
   const availableAed = Math.max(0, FINANCIER.appetiteAed - deployedAed);
 
   return (
     <Ctx.Provider
-      value={{ financier: FINANCIER, borrowers, facilities, deployedAed, availableAed, fund, markRepaid, refresh }}
+      value={{
+        financier: FINANCIER,
+        borrowers,
+        facilities,
+        deployedAed,
+        availableAed,
+        isAuthenticated,
+        walletAddress: embedded?.address,
+        login,
+        fund,
+        markRepaid,
+        refresh,
+      }}
     >
       {children}
     </Ctx.Provider>

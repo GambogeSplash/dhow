@@ -15,7 +15,7 @@ import {
 
 export default function SendPage() {
   const router = useRouter();
-  const { business, suppliers, addSupplier, sendPayment } = useCorridor();
+  const { business, suppliers, addSupplier, sendPayment, walletAddress } = useCorridor();
 
   const [supplierId, setSupplierId] = useState<string>(suppliers[0]?.id ?? "");
   const [goods, setGoods] = useState("");
@@ -56,7 +56,7 @@ export default function SendPage() {
       </p>
 
       <div className="mt-6">
-        <FaucetCard />
+        <FaucetCard walletAddress={walletAddress} />
       </div>
 
       <div className="mt-6 overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">

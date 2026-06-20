@@ -195,6 +195,89 @@ export async function listBorrowers(): Promise<
   return out;
 }
 
+// ---- facilities (financier funding) ----
+
+export interface FacilityRecord {
+  id: string;
+  borrowerId: string;
+  borrowerName: string;
+  amountAed: number;
+  amountUsdc: number;
+  txHash?: string;
+  explorerUrl?: string;
+  repaid: boolean;
+  fundedAt: number;
+}
+
+type FacilityRow = {
+  id: string;
+  borrower_id: string;
+  borrower_name: string;
+  amount_aed: number;
+  amount_usdc: number;
+  tx_hash: string | null;
+  explorer_url: string | null;
+  repaid: boolean;
+  funded_at: string | number;
+};
+
+function toFacility(r: FacilityRow): FacilityRecord {
+  return {
+    id: r.id,
+    borrowerId: r.borrower_id,
+    borrowerName: r.borrower_name,
+    amountAed: num(r.amount_aed),
+    amountUsdc: num(r.amount_usdc),
+    txHash: r.tx_hash ?? undefined,
+    explorerUrl: r.explorer_url ?? undefined,
+    repaid: r.repaid,
+    fundedAt: num(r.funded_at),
+  };
+}
+
+export async function listFacilities(financierId: string): Promise<FacilityRecord[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM facilities WHERE financier_id = ${financierId} ORDER BY funded_at DESC
+  `) as FacilityRow[];
+  return rows.map(toFacility);
+}
+
+export async function createFacility(
+  financierId: string,
+  f: {
+    id: string;
+    borrowerId: string;
+    borrowerName: string;
+    amountAed: number;
+    amountUsdc: number;
+    txHash?: string;
+    explorerUrl?: string;
+    fundedAt: number;
+  },
+): Promise<void> {
+  const sql = db();
+  // One live facility per borrower per financier; re-funding replaces it.
+  await sql`DELETE FROM facilities WHERE financier_id = ${financierId} AND borrower_id = ${f.borrowerId} AND repaid = FALSE`;
+  await sql`
+    INSERT INTO facilities (
+      id, financier_id, borrower_id, borrower_name, amount_aed, amount_usdc,
+      tx_hash, explorer_url, repaid, funded_at
+    ) VALUES (
+      ${f.id}, ${financierId}, ${f.borrowerId}, ${f.borrowerName}, ${f.amountAed}, ${f.amountUsdc},
+      ${f.txHash ?? null}, ${f.explorerUrl ?? null}, FALSE, ${f.fundedAt}
+    )
+  `;
+}
+
+export async function markFacilityRepaid(financierId: string, borrowerId: string): Promise<void> {
+  const sql = db();
+  await sql`
+    UPDATE facilities SET repaid = TRUE
+    WHERE financier_id = ${financierId} AND borrower_id = ${borrowerId}
+  `;
+}
+
 // ---- suppliers ----
 
 export async function addSupplier(

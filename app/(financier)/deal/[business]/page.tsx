@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useFinancier } from "@/components/FinancierProvider";
+import { FaucetCard } from "@/components/FaucetCard";
 import { ScoreCard } from "@/components/score-viz";
 import { aed, usdcLabel } from "@/lib/corridor";
 
 export default function DealPage() {
   const params = useParams<{ business: string }>();
   const router = useRouter();
-  const { borrowers, facilities, fund } = useFinancier();
+  const { borrowers, facilities, fund, walletAddress } = useFinancier();
   const [funding, setFunding] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const borrower = borrowers.find((b) => b.id === params.business);
   const facility = facilities.find((f) => f.borrowerId === params.business);
@@ -32,10 +34,12 @@ export default function DealPage() {
 
   async function onFund() {
     if (!borrower) return;
+    setErr(null);
     setFunding(true);
-    await fund(borrower);
+    const result = await fund(borrower);
     setFunding(false);
-    router.push("/portfolio");
+    if (result.ok) router.push("/portfolio");
+    else setErr(result.error ?? "Funding failed");
   }
 
   return (
@@ -81,7 +85,14 @@ export default function DealPage() {
                 </button>
               )}
             </div>
+            {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
           </div>
+
+          {!facility && (
+            <div className="mt-4">
+              <FaucetCard walletAddress={walletAddress} />
+            </div>
+          )}
         </section>
 
         <section>

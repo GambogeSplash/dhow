@@ -21,7 +21,9 @@ const wagmiConfig = createConfig({
   transports: { [dhowChain.id]: http() },
 });
 
-export function Providers({ children }: { children: React.ReactNode }) {
+/** Privy + Wagmi + React Query shell, shared by the importer and financier
+ *  surfaces. Renders a setup notice instead of crashing when Privy is unset. */
+export function PrivyStack({ children }: { children: React.ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
   if (!appId) {
@@ -53,10 +55,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }}
     >
       <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>
-          <CorridorProvider>{children}</CorridorProvider>
-        </WagmiProvider>
+        <WagmiProvider config={wagmiConfig}>{children}</WagmiProvider>
       </QueryClientProvider>
     </PrivyProvider>
+  );
+}
+
+/** The importer workspace stack. */
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <PrivyStack>
+      <CorridorProvider>{children}</CorridorProvider>
+    </PrivyStack>
   );
 }
