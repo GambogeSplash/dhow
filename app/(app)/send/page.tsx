@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCorridor } from "@/components/CorridorProvider";
+import { FaucetCard } from "@/components/FaucetCard";
 import {
   aed,
   AED_PER_USD,
@@ -21,7 +22,7 @@ export default function SendPage() {
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<SettlementMode>("prooflock");
   const [addingSupplier, setAddingSupplier] = useState(suppliers.length === 0);
-  const [newSup, setNewSup] = useState({ name: "", city: "", country: "" });
+  const [newSup, setNewSup] = useState({ name: "", city: "", country: "", walletAddress: "" });
 
   const amountAed = Number(amount.replace(/[^0-9.]/g, "")) || 0;
   const amountUsdc = amountAed > 0 ? makeCorridorUsdc(amountAed) : 0;
@@ -29,9 +30,14 @@ export default function SendPage() {
 
   function handleAddSupplier() {
     if (!newSup.name.trim() || !newSup.city.trim() || !newSup.country.trim()) return;
-    const s = addSupplier(newSup);
+    const s = addSupplier({
+      name: newSup.name,
+      city: newSup.city,
+      country: newSup.country,
+      walletAddress: newSup.walletAddress.trim() || undefined,
+    });
     setSupplierId(s.id);
-    setNewSup({ name: "", city: "", country: "" });
+    setNewSup({ name: "", city: "", country: "", walletAddress: "" });
     setAddingSupplier(false);
   }
 
@@ -49,7 +55,11 @@ export default function SendPage() {
         record writes itself.
       </p>
 
-      <div className="mt-8 overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
+      <div className="mt-6">
+        <FaucetCard />
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
         {/* counterparties */}
         <div className="border-b border-line px-6 py-5">
           <div className="flex items-center justify-between gap-4">
@@ -99,6 +109,12 @@ export default function SendPage() {
                   value={newSup.country}
                   onChange={(e) => setNewSup({ ...newSup, country: e.target.value })}
                   className="rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-teal"
+                />
+                <input
+                  placeholder="Wallet address 0x… (where USDC settles)"
+                  value={newSup.walletAddress}
+                  onChange={(e) => setNewSup({ ...newSup, walletAddress: e.target.value })}
+                  className="col-span-2 rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-teal"
                 />
                 <button
                   onClick={handleAddSupplier}

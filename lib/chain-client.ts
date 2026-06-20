@@ -82,6 +82,13 @@ const USDC_ABI = [
     ],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
 ] as const;
 
 const ESCROW_ABI = [
@@ -135,6 +142,19 @@ function requireAddrs(): { usdc: Hex; escrow: Hex } {
 export interface SignResult {
   txHash: Hex;
   explorerUrl: string;
+}
+
+/** Read a wallet's gas (POL) and test-USDC balances. Returns null if unconfigured. */
+export async function readBalances(
+  address: Hex,
+): Promise<{ pol: number; usdc: number } | null> {
+  if (!USDC) return null;
+  const pub = createPublicClient({ chain: dhowChain, transport: http(RPC_URL) });
+  const [polWei, usdcRaw] = await Promise.all([
+    pub.getBalance({ address }),
+    pub.readContract({ address: USDC, abi: USDC_ABI, functionName: "balanceOf", args: [address] }) as Promise<bigint>,
+  ]);
+  return { pol: Number(polWei) / 1e18, usdc: Number(usdcRaw) / 1e6 };
 }
 
 /** Open settlement: a direct USDC transfer from the buyer to the supplier. */

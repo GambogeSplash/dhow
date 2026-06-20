@@ -5,6 +5,8 @@ import {
   defineChain,
   http,
   keccak256,
+  parseEther,
+  parseUnits,
   toBytes,
   type Hex,
 } from "viem";
@@ -152,4 +154,58 @@ export async function readScoreOnChain(
     pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "isEligible", args: [business] }),
   ]);
   return { score: Number(score), eligible: Boolean(eligible) };
+}
+
+const MINT_ABI = [
+  {
+    type: "function",
+    name: "mint",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+export interface FaucetResult {
+  polTx: Hex;
+  usdcTx: Hex;
+  polFunded: string; // human amount
+  usdcFunded: string;
+}
+
+/**
+ * Testnet faucet: the operator sponsors a fresh embedded wallet with native POL
+ * (gas) and mints test USDC to it, so a brand-new user can immediately settle
+ * a real on-chain payment. Testnet only — MockUSDC has an open mint. Skips POL
+ * if the wallet already has gas, to avoid draining the operator on repeat taps.
+ */
+export async function fundTestWallet(cfg: ChainConfig, to: Hex): Promise<FaucetResult> {
+  const POL_AMOUNT = "0.05"; // enough for several Amoy txs
+  const USDC_AMOUNT = 250_000; // generous test ceiling, 6dp
+  const { wallet, pub, account } = clients(cfg);
+
+  const balance = await pub.getBalance({ address: to });
+  let polTx: Hex = ("0x" + "0".repeat(64)) as Hex;
+  if (balance < parseEther("0.01")) {
+    polTx = await wallet.sendTransaction({
+      account,
+      chain: wallet.chain,
+      to,
+      value: parseEther(POL_AMOUNT),
+    });
+    await pub.waitForTransactionReceipt({ hash: polTx });
+  }
+
+  const usdcTx = await wallet.writeContract({
+    address: cfg.usdc,
+    abi: MINT_ABI,
+    functionName: "mint",
+    args: [to, parseUnits(String(USDC_AMOUNT), 6)],
+  });
+  await pub.waitForTransactionReceipt({ hash: usdcTx });
+
+  return { polTx, usdcTx, polFunded: POL_AMOUNT, usdcFunded: String(USDC_AMOUNT) };
 }
