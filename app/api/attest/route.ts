@@ -5,19 +5,11 @@ import { createShipmentAttestation, easConfigured } from "@/lib/eas";
 
 export const runtime = "nodejs";
 
-function synthUid(): string {
-  const hex = "0123456789abcdef";
-  let h = "0x";
-  for (let i = 0; i < 12; i++) h += hex[Math.floor(Math.random() * 16)];
-  h += "…";
-  for (let i = 0; i < 6; i++) h += hex[Math.floor(Math.random() * 16)];
-  return h;
-}
-
 /*
  * Create a shipment-proof attestation for a corridor. The trusted inspector
- * signs it on-chain; the returned uid is then passed to the release action.
- * Sim fallback (synthetic uid) when EAS isn't wired so the demo flow holds.
+ * signs it on-chain (server-side operator key); the returned uid is then passed
+ * to the user-signed release. Errors clearly when EAS isn't configured — no
+ * fabricated attestations.
  */
 export async function POST(req: NextRequest) {
   let body: { ref?: string; supplier?: string };
@@ -34,21 +26,21 @@ export async function POST(req: NextRequest) {
 
   const cfg = getChainConfig();
   if (!cfg || !easConfigured(cfg)) {
-    return NextResponse.json({ mode: "sim", uid: synthUid(), txHash: null, explorerUrl: null });
+    return NextResponse.json(
+      { error: "attestation service not configured (set DHOW_EAS_ADDRESS / DHOW_SHIPMENT_SCHEMA)" },
+      { status: 503 },
+    );
   }
 
   try {
     const recipient = (supplier as Hex) ?? cfg.supplier;
     const result = await createShipmentAttestation(cfg, ref, recipient);
-    return NextResponse.json({ mode: "chain", ...result });
+    return NextResponse.json(result);
   } catch (err) {
     console.error("attest failed", err);
-    return NextResponse.json({
-      mode: "sim",
-      uid: synthUid(),
-      txHash: null,
-      explorerUrl: null,
-      error: err instanceof Error ? err.message : "attest error",
-    });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "attest error" },
+      { status: 502 },
+    );
   }
 }

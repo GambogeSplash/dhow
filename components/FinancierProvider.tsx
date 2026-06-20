@@ -7,21 +7,15 @@ import {
   CorridorScore,
   scoreCorridors,
 } from "@/lib/corridor";
-import {
-  AccountRecord,
-  loadAccount,
-  loadSampleAccount,
-  SAMPLE_ACCOUNT_ID,
-  loadSession,
-} from "@/lib/account";
-import { FINANCIER } from "@/lib/seed";
+import type { Business } from "@/lib/account";
+import { FINANCIER } from "@/lib/financier";
 
 /*
- * The financier (Creek Capital) side. Read-mostly: it derives borrowers from
- * the importer's persisted workspace (same-origin localStorage, so a two-window
- * demo shows live updates) and overlays the on-chain Credit Score from the
- * registry via /api/score when the chain is wired. The only write is funding,
- * which is a real USDC transfer when the chain is configured.
+ * The financier (Creek Capital) side. Read-mostly: borrowers come from the
+ * shared database via /api/borrowers (cross-machine, real), and the on-chain
+ * verified Credit Score is overlaid from the registry via /api/score. Funding
+ * is recorded as a local commitment ledger for now; financier-wallet-signed
+ * on-chain disbursement is the next layer.
  */
 
 export interface Borrower {
@@ -57,42 +51,30 @@ interface FinancierState {
   refresh: () => void;
 }
 
-const FACILITIES_KEY = "dhow.financier.v1";
+const FACILITIES_KEY = "dhow.financier.facilities.v1";
 
 function isFullAddress(a?: string): boolean {
   return !!a && /^0x[0-9a-fA-F]{40}$/.test(a);
 }
 
-function toBorrower(rec: AccountRecord, now: number, onchainScore: number | null): Borrower {
-  const score = scoreCorridors(rec.corridors, now);
+function toBorrower(
+  business: Business,
+  corridors: Corridor[],
+  now: number,
+  onchainScore: number | null,
+): Borrower {
+  const score = scoreCorridors(corridors, now);
   return {
-    id: rec.business.id,
-    name: rec.business.name,
-    city: rec.business.city,
-    country: rec.business.country,
-    wallet: rec.business.walletAddress,
-    corridors: rec.corridors,
+    id: business.id,
+    name: business.name,
+    city: business.city,
+    country: business.country,
+    wallet: business.walletAddress,
+    corridors,
     score,
     offerAed: advanceOffer(score),
     onchainScore,
   };
-}
-
-/** Gather the SME accounts visible in this browser: the sample plus any signed-in account. */
-function loadBorrowerRecords(now: number): AccountRecord[] {
-  const records: AccountRecord[] = [];
-  const seen = new Set<string>();
-
-  const sample = loadAccount(SAMPLE_ACCOUNT_ID) ?? loadSampleAccount(now);
-  records.push(sample);
-  seen.add(sample.business.id);
-
-  const sessionId = loadSession();
-  if (sessionId && sessionId !== SAMPLE_ACCOUNT_ID) {
-    const active = loadAccount(sessionId);
-    if (active && !seen.has(active.business.id)) records.push(active);
-  }
-  return records;
 }
 
 function loadFacilities(): Facility[] {
@@ -119,37 +101,43 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
 
   const refresh = useCallback(() => {
-    const now = Date.now();
-    const records = loadBorrowerRecords(now);
-    const base = records.map((r) => toBorrower(r, now, null));
-    setBorrowers(base);
-
-    // Overlay the on-chain verified score where a real wallet + chain exist.
-    base.forEach(async (b, i) => {
-      if (!isFullAddress(b.wallet)) return;
+    void (async () => {
+      const now = Date.now();
+      let records: Array<{ business: Business; corridors: Corridor[] }> = [];
       try {
-        const res = await fetch(`/api/score?business=${b.wallet}`);
+        const res = await fetch("/api/borrowers");
         const data = await res.json();
-        if (data?.mode === "chain" && typeof data.score === "number") {
-          setBorrowers((prev) => {
-            const next = [...prev];
-            if (next[i]) next[i] = { ...next[i], onchainScore: data.score };
-            return next;
-          });
-        }
+        records = Array.isArray(data.borrowers) ? data.borrowers : [];
       } catch {
-        /* chain not wired; the derived score stands */
+        return;
       }
-    });
+      const base = records.map((r) => toBorrower(r.business, r.corridors, now, null));
+      setBorrowers(base);
+
+      // Overlay the on-chain verified score where a real wallet + registry exist.
+      base.forEach(async (b, i) => {
+        if (!isFullAddress(b.wallet)) return;
+        try {
+          const res = await fetch(`/api/score?business=${b.wallet}`);
+          const data = await res.json();
+          if (typeof data?.score === "number") {
+            setBorrowers((prev) => {
+              const next = [...prev];
+              if (next[i]) next[i] = { ...next[i], onchainScore: data.score };
+              return next;
+            });
+          }
+        } catch {
+          /* registry not wired; the derived score stands */
+        }
+      });
+    })();
   }, []);
 
   useEffect(() => {
     setFacilities(loadFacilities());
     refresh();
-    // Poll localStorage so the financier sees the importer's live moves (other tab).
-    // Tighter in demo mode so the opportunity surfaces almost immediately on stage.
-    const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "1";
-    const id = setInterval(refresh, demoMode ? 1000 : 2500);
+    const id = setInterval(refresh, 4000);
     const onStorage = () => refresh();
     window.addEventListener("storage", onStorage);
     return () => {
@@ -158,41 +146,22 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
     };
   }, [refresh]);
 
-  const fund = useCallback(
-    async (borrower: Borrower) => {
-      let txHash: string | undefined;
-      let explorerUrl: string | undefined;
-      if (isFullAddress(borrower.wallet)) {
-        try {
-          const res = await fetch("/api/fund", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ business: borrower.wallet, amountUsdc: borrower.offerAed / 3.6725 }),
-          });
-          const data = await res.json();
-          txHash = data.txHash;
-          explorerUrl = data.explorerUrl ?? undefined;
-        } catch {
-          /* fail soft; record the facility regardless so the demo continues */
-        }
-      }
-      const facility: Facility = {
-        borrowerId: borrower.id,
-        borrowerName: borrower.name,
-        amountAed: borrower.offerAed,
-        fundedAt: Date.now(),
-        txHash,
-        explorerUrl,
-        repaid: false,
-      };
-      setFacilities((prev) => {
-        const next = [...prev.filter((f) => f.borrowerId !== borrower.id), facility];
-        saveFacilities(next);
-        return next;
-      });
-    },
-    [],
-  );
+  const fund = useCallback(async (borrower: Borrower) => {
+    // Records the financier's commitment. Real financier-wallet-signed USDC
+    // disbursement to the borrower is the next layer.
+    const facility: Facility = {
+      borrowerId: borrower.id,
+      borrowerName: borrower.name,
+      amountAed: borrower.offerAed,
+      fundedAt: Date.now(),
+      repaid: false,
+    };
+    setFacilities((prev) => {
+      const next = [...prev.filter((f) => f.borrowerId !== borrower.id), facility];
+      saveFacilities(next);
+      return next;
+    });
+  }, []);
 
   const markRepaid = useCallback((borrowerId: string) => {
     setFacilities((prev) => {

@@ -40,7 +40,7 @@ const SCHEMA_PARAMS = parseAbiParameters(
 
 export interface AttestationResult {
   uid: Hex;
-  txHash: Hex | null; // null in sim mode
+  txHash: Hex | null; // the on-chain attestation tx
   explorerUrl: string | null;
 }
 

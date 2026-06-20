@@ -5,16 +5,16 @@ import {
   defineChain,
   http,
   keccak256,
-  parseUnits,
   toBytes,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 /*
- * Server-only chain layer. Holds the burner signer and talks to Polygon (Amoy)
- * or any EVM RPC. Fully env-gated: if the chain isn't configured the API falls
- * back to a simulated hash, so the demo runs with or without on-chain wiring.
+ * Server-only chain layer for OPERATOR actions only: the trusted inspector's
+ * EAS attestation (lib/eas.ts) and the score registry read/write. User-signed
+ * settlement lives client-side in lib/chain-client.ts — Dhow never signs a
+ * user's payment. Env-gated: unset config means these operator features are off.
  */
 
 export interface ChainConfig {
@@ -71,68 +71,6 @@ export function getChainConfig(): ChainConfig | null {
   };
 }
 
-const USDC_ABI = [
-  {
-    type: "function",
-    name: "transfer",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "to", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ type: "bool" }],
-  },
-] as const;
-
-const ESCROW_ABI = [
-  {
-    type: "function",
-    name: "lock",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "corridorId", type: "bytes32" },
-      { name: "supplier", type: "address" },
-      { name: "amount", type: "uint256" },
-      { name: "deadline", type: "uint64" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "releaseWithAttestation",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "corridorId", type: "bytes32" },
-      { name: "attestationUid", type: "bytes32" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "releaseByInspector",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "corridorId", type: "bytes32" },
-      { name: "proofRef", type: "bytes32" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "requireEas",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "refund",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "corridorId", type: "bytes32" }],
-    outputs: [],
-  },
-] as const;
-
 const REGISTRY_ABI = [
   {
     type: "function",
@@ -161,10 +99,6 @@ const REGISTRY_ABI = [
   },
 ] as const;
 
-// "release" settles a Proof-Lock: via EAS attestation when one is supplied,
-// otherwise via the inspector fallback (used when requireEas is off).
-export type ChainAction = "pay" | "lock" | "release" | "refund";
-
 function clients(cfg: ChainConfig) {
   const chain = defineChain({
     id: cfg.chainId,
@@ -185,81 +119,6 @@ export function corridorId(ref: string): Hex {
 /** A read-only public client for indexing/score reads (no signer needed). */
 export function publicClient(cfg: ChainConfig) {
   return clients(cfg).pub;
-}
-
-/**
- * Executes a settlement action on-chain and waits for the receipt.
- * For "release", pass an EAS `attestationUid` to settle against a real
- * attestation; omit it to fall back to the inspector path (requireEas off).
- */
-export async function runChainAction(
-  cfg: ChainConfig,
-  action: ChainAction,
-  ref: string,
-  amountUsdc: number,
-  attestationUid?: Hex,
-): Promise<Hex> {
-  const { wallet, pub } = clients(cfg);
-  const cid = corridorId(ref);
-  let hash: Hex;
-
-  if (action === "pay") {
-    hash = await wallet.writeContract({
-      address: cfg.usdc,
-      abi: USDC_ABI,
-      functionName: "transfer",
-      args: [cfg.supplier, parseUnits(String(amountUsdc), 6)],
-    });
-  } else if (action === "lock") {
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 86400);
-    hash = await wallet.writeContract({
-      address: cfg.escrow,
-      abi: ESCROW_ABI,
-      functionName: "lock",
-      args: [cid, cfg.supplier, parseUnits(String(amountUsdc), 6), deadline],
-    });
-  } else if (action === "refund") {
-    // On-chain refund reverts until the lock's deadline passes ("not expired").
-    // Models a timed-out / disputed corridor returning funds to the payer.
-    hash = await wallet.writeContract({
-      address: cfg.escrow,
-      abi: ESCROW_ABI,
-      functionName: "refund",
-      args: [cid],
-    });
-  } else if (attestationUid) {
-    // Release against a real EAS shipment-proof attestation (permissionless).
-    hash = await wallet.writeContract({
-      address: cfg.escrow,
-      abi: ESCROW_ABI,
-      functionName: "releaseWithAttestation",
-      args: [cid, attestationUid],
-    });
-  } else {
-    // Inspector fallback when EAS is unavailable. proofRef is a free bytes32 tag.
-    hash = await wallet.writeContract({
-      address: cfg.escrow,
-      abi: ESCROW_ABI,
-      functionName: "releaseByInspector",
-      args: [cid, keccak256(toBytes(`proof:${ref}`))],
-    });
-  }
-
-  await pub.waitForTransactionReceipt({ hash });
-  return hash;
-}
-
-/** Financier funding: a real USDC transfer from the burner to a business wallet. */
-export async function transferUsdc(cfg: ChainConfig, to: Hex, amountUsdc: number): Promise<Hex> {
-  const { wallet, pub } = clients(cfg);
-  const hash = await wallet.writeContract({
-    address: cfg.usdc,
-    abi: USDC_ABI,
-    functionName: "transfer",
-    args: [to, parseUnits(String(amountUsdc), 6)],
-  });
-  await pub.waitForTransactionReceipt({ hash });
-  return hash;
 }
 
 /** Post a freshly computed Credit Score for a business to the on-chain registry. */

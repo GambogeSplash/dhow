@@ -17,7 +17,7 @@ const NAV = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { business, score, isSample, signOut, enterSample } = useWorkspace();
+  const { business, score, walletAddress, signOut } = useWorkspace();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -86,36 +86,14 @@ export function Sidebar() {
       <div className="relative border-t border-line p-3" ref={menuRef}>
         {menuOpen && (
           <div className="absolute bottom-16 left-3 right-3 overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface shadow-lg">
-            {isSample ? (
-              <>
-                <MenuItem
-                  onClick={() => {
-                    enterSample();
-                    setMenuOpen(false);
-                    router.push("/overview");
-                  }}
-                >
-                  Reset sample data
-                </MenuItem>
-                <MenuItem
-                  onClick={() => {
-                    signOut();
-                    router.push("/onboarding");
-                  }}
-                >
-                  Start your own →
-                </MenuItem>
-              </>
-            ) : (
-              <MenuItem
-                onClick={() => {
-                  signOut();
-                  router.push("/");
-                }}
-              >
-                Sign out
-              </MenuItem>
-            )}
+            <MenuItem
+              onClick={() => {
+                signOut();
+                router.push("/");
+              }}
+            >
+              Sign out
+            </MenuItem>
           </div>
         )}
         <button
@@ -130,7 +108,7 @@ export function Sidebar() {
               {business?.name}
             </span>
             <span className="block truncate text-xs text-ink-faint">
-              {business?.walletAddress ?? business?.email}
+              {walletAddress ?? business?.email}
             </span>
           </span>
           <Chevron />

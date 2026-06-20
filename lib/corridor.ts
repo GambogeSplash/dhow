@@ -19,9 +19,9 @@ export type SettlementStatus =
 
 export type ProofStatus = "awaiting" | "attested" | "failed";
 
-/** On-chain write lifecycle for a corridor's settlement action. In sim mode a
- *  write always confirms; "failed" is reached only when the settlement request
- *  itself can't be reached, and a failed write never counts toward the score. */
+/** On-chain write lifecycle for a corridor's settlement action. "confirmed"
+ *  means the user's signed transaction was mined; "failed" is reached when the
+ *  signing/broadcast fails, and a failed write never counts toward the score. */
 export type TxState = "pending" | "confirmed" | "failed";
 
 export interface Counterparty {
@@ -29,6 +29,7 @@ export interface Counterparty {
   name: string;
   city: string;
   country: string;
+  walletAddress?: string; // on-chain address settlements are sent to
 }
 
 export interface Corridor {

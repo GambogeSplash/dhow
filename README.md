@@ -54,18 +54,19 @@ A working product, not slideware, and the settlement is real on-chain, not mocke
 - **`DhowScoreRegistry`** — the Corridor Score posted on-chain per business, so the financier reads `scoreOf`/`isEligible` directly from chain rather than trusting a database.
 - **`MockUSDC`** plus a minimal EAS-compatible attestation contract, with a passing test suite (15 tests) and a clean deploy script.
 
-There are two ways in: **Start free** for the real onboarding, or **Explore with sample data** to see the whole flywheel in one click.
+You get in by signing in with Privy — email, passkey, or an existing wallet — which provisions a non-custodial embedded wallet. From there you onboard your business, add a supplier, and start settling.
 
 ## Architecture
 
 | Layer | Where | Role |
 | --- | --- | --- |
-| Scoring engine | `lib/corridor.ts` | Pure, chain-agnostic. Corridor Score and advance sizing as transparent functions of settled corridors. Shared by client and server. |
-| Account layer | `lib/account.ts` | Per-user identity, business, suppliers, wallet, and the sample workspace. Where a real auth provider and database swap in. |
-| Importer store | `components/CorridorProvider.tsx` | Client state and actions. Settling a Proof-Lock runs the full chain: create the EAS attestation, release against it, post the lifted score on-chain. |
-| Financier store | `components/FinancierProvider.tsx` | The demand side. Derives borrowers, overlays the on-chain verified score, and funds with a real transfer. |
-| Chain layer | `lib/chain.ts`, `lib/eas.ts`, `lib/indexer.ts` | Server-only viem signer. Settlement, EAS attestation, on-chain score read/post, funding, and an event indexer. Env-gated: real Polygon tx when configured, simulated hash otherwise, so it always runs. |
-| API | `app/api/{chain,attest,score,fund,corridors}` | The server boundary the UI calls for every on-chain action. |
+| Scoring engine | `lib/corridor.ts` | Pure, chain-agnostic. Credit Score and advance sizing as transparent functions of settled corridors. Shared by client and server. |
+| Identity | Privy (`components/Providers.tsx`) | Real login + a non-custodial embedded wallet per business. The verified Privy DID is the account key the server trusts. |
+| Data layer | `lib/db.ts`, `lib/store-server.ts`, `db/schema.sql` | Neon / Vercel Postgres. Server-authoritative businesses, suppliers, corridors — scoped to the authenticated Privy user. |
+| Client signing | `lib/chain-client.ts` | The user signs their own settlement from their embedded wallet: open pay, Proof-Lock approve+lock, release, refund. Dhow never signs a user's payment. |
+| Importer store | `components/CorridorProvider.tsx` | Privy auth + DB persistence + user-signed writes. Settling a Proof-Lock runs the full chain: inspector EAS attestation (server), user-signed release, on-chain score post. |
+| Operator chain layer | `lib/chain.ts`, `lib/eas.ts`, `lib/indexer.ts` | Server-only viem signer for operator-only actions: the trusted inspector's EAS attestation, the score-registry read/write, and an event indexer. |
+| API | `app/api/{account,suppliers,corridors,attest,score,borrowers}` | Privy-verified persistence routes plus the operator/feed endpoints. |
 | Contracts | `contracts/src/{DhowEscrow,DhowScoreRegistry,MockUSDC}.sol` | EAS-gated escrow and the on-chain credit registry. |
 | Surfaces | `app/onboarding`, `app/(app)/*`, `app/(financier)/*` | The two-sided product, behind real accounts. |
 
@@ -80,12 +81,13 @@ An honest read, because the gaps are the roadmap.
 | Stage | State |
 | --- | --- |
 | Thesis validated | Done. The wedge, the marketplace model, and the regulatory posture are reasoned through and citation-backed in `docs/research/`. |
-| Working two-sided product | Done. Importer and financier surfaces, real onboarding, the full flywheel clickable. |
-| Real on-chain settlement | Done and verified end to end on a real chain: lock → EAS attestation → attestation-gated release → on-chain Corridor Score → financier funding, each a real transaction, confirmed by independent chain reads. 15 contract tests pass. |
-| Public testnet (Amoy) | Partial. USDC + the attestation contract are deployed on Amoy; the escrow + registry deploy and the public Polygonscan demo are gated on funding a burner with test POL. |
-| Production | Not yet, by design. |
+| Working two-sided product | Done. Importer and financier surfaces, real Privy onboarding, the full flywheel. |
+| Real accounts + persistence | Done. Privy identity (non-custodial embedded wallets) and a Neon/Vercel Postgres database, scoped per verified user. No localStorage, no sample data. |
+| User-signed on-chain settlement | Done. The user signs their own open pay / Proof-Lock / release / refund from their embedded wallet on Polygon Amoy. Dhow never signs a user's payment. 15 contract tests pass. |
+| Public testnet (Amoy) | Live. USDC, escrow, registry and an EAS-compatible attestation contract are deployed on Amoy; settlement produces real Polygonscan transactions. |
+| Production (mainnet) | Not yet, by design. |
 
-Simplified for the demo, and where a real build goes next: auth and persistence are localStorage (no database or Privy yet); a single server-side burner acts as payer, inspector, and score poster (no per-user signing or decentralised oracle); the attestation contract is an EAS-compatible stand-in until canonical EAS is wired; USDC is an open-mint testnet token, not Circle USDC on mainnet. No KYC/AML, no real financier onboarding, single repayment only, contracts unaudited, and no real users. The thesis is proven by the live flywheel, not by breadth or scale.
+Where a real build goes next: the inspector EAS attestation and score-registry write are still operator-signed server-side (a trusted attester stands in for a decentralised shipment-proof oracle); financier funding is recorded as a local commitment ledger rather than a financier-wallet-signed disbursement; the attestation contract is an EAS-compatible stand-in until canonical EAS is wired; USDC is an open-mint testnet token, not Circle USDC on mainnet. Mainnet is gated on a contract audit, real USDC liquidity, and KYC/AML. No real users yet.
 
 ## Docs
 

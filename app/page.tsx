@@ -36,8 +36,7 @@ export default function Home() {
         </p>
         <LandingCta />
         <p className="mt-3 text-sm text-ink-faint">
-          Pay → settle → score → capital. Sign up, or explore with sample data
-          first.
+          Pay → settle → score → capital. Sign up in under a minute.
         </p>
       </section>
 

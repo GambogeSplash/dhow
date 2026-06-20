@@ -1,19 +1,8 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useAccount } from "./CorridorProvider";
 
-/** Hero call-to-action: real sign-up vs one-click sample exploration. */
+/** Hero call-to-action. The landing is public and provider-free, so these are
+ *  plain links into the onboarding flow. */
 export function LandingCta() {
-  const router = useRouter();
-  const { enterSample } = useAccount();
-
-  function explore() {
-    enterSample();
-    router.push("/overview");
-  }
-
   return (
     <div className="mt-8 flex flex-wrap items-center gap-3">
       <Link
@@ -22,12 +11,12 @@ export function LandingCta() {
       >
         Start free →
       </Link>
-      <button
-        onClick={explore}
+      <Link
+        href="/onboarding"
         className="rounded-full border border-line bg-surface px-6 py-3 text-sm font-medium text-ink transition-colors hover:border-line-strong"
       >
-        Explore with sample data
-      </button>
+        Sign in
+      </Link>
     </div>
   );
 }

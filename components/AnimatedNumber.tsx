@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-/** Demo mode speeds the count-up so the score moment lands faster on stage. */
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "1";
-const DEFAULT_DURATION = DEMO_MODE ? 500 : 900;
+const DEFAULT_DURATION = 900;
 
 /** Tweens from `from` to `value` once on mount and whenever `value` changes. */
 export function AnimatedNumber({

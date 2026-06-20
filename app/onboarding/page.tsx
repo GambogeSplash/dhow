@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useAccount } from "@/components/CorridorProvider";
 import { DhowMark } from "@/components/DhowMark";
 
-type Step = "signin" | "business" | "supplier" | "wallet";
+type Step = "signin" | "business" | "supplier";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -14,39 +14,36 @@ export default function OnboardingPage() {
     hydrated,
     isAuthenticated,
     isOnboarded,
-    business,
-    signIn,
+    walletAddress,
+    login,
     saveBusiness,
     addSupplier,
-    connectWallet,
   } = useAccount();
 
   const [step, setStep] = useState<Step>("signin");
 
-  // If an already-onboarded account is restored on arrival, skip straight into
-  // the app. Gated to the signin step so completing the business step mid-flow
-  // doesn't short-circuit the remaining supplier/wallet steps.
+  // Already onboarded → straight into the app.
   useEffect(() => {
     if (hydrated && isAuthenticated && isOnboarded && step === "signin") {
       router.replace("/overview");
     }
   }, [hydrated, isAuthenticated, isOnboarded, step, router]);
 
+  // Just authenticated (no business yet) → move past the sign-in step.
+  useEffect(() => {
+    if (hydrated && isAuthenticated && !isOnboarded && step === "signin") {
+      setStep("business");
+    }
+  }, [hydrated, isAuthenticated, isOnboarded, step]);
+
   // form state
-  const [email, setEmail] = useState("");
   const [bizName, setBizName] = useState("");
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("");
   const [supName, setSupName] = useState("");
   const [supCity, setSupCity] = useState("");
   const [supCountry, setSupCountry] = useState("");
-
-  function handleSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    const { onboarded } = signIn(email);
-    if (onboarded) router.replace("/overview");
-    else setStep("business");
-  }
+  const [supWallet, setSupWallet] = useState("");
 
   function handleBusiness(e: React.FormEvent) {
     e.preventDefault();
@@ -56,15 +53,16 @@ export default function OnboardingPage() {
 
   function handleSupplier(e: React.FormEvent) {
     e.preventDefault();
-    addSupplier({ name: supName, city: supCity, country: supCountry });
-    setStep("wallet");
+    addSupplier({
+      name: supName,
+      city: supCity,
+      country: supCountry,
+      walletAddress: supWallet.trim() || undefined,
+    });
+    router.replace("/overview");
   }
 
-  function handleConnect() {
-    connectWallet();
-  }
-
-  const steps: Step[] = ["signin", "business", "supplier", "wallet"];
+  const steps: Step[] = ["signin", "business", "supplier"];
   const stepIndex = steps.indexOf(step);
 
   return (
@@ -78,7 +76,6 @@ export default function OnboardingPage() {
       </header>
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-12">
-        {/* progress */}
         {step !== "signin" && (
           <div className="mb-6 flex items-center gap-1.5">
             {steps.slice(1).map((s, i) => (
@@ -93,32 +90,24 @@ export default function OnboardingPage() {
         )}
 
         {step === "signin" && (
-          <form onSubmit={handleSignIn}>
+          <div>
             <h1 className="font-display text-3xl tracking-tight">Start with Dhow</h1>
             <p className="mt-2 text-ink-2">
               Pay your suppliers in stablecoin and build a cashflow record that
-              unlocks working capital. Use your work email to begin.
+              unlocks working capital. Sign in to begin — we&apos;ll create a
+              secure wallet for you automatically.
             </p>
-            <Field
-              label="Work email"
-              type="email"
-              required
-              value={email}
-              onChange={setEmail}
-              placeholder="you@yourcompany.com"
-              autoFocus
-            />
-            <Submit disabled={!email.trim()}>Continue</Submit>
+            <button
+              onClick={() => login()}
+              disabled={!hydrated}
+              className="mt-6 w-full rounded-full bg-teal py-3 text-sm font-medium text-white transition-colors hover:bg-teal-deep disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {hydrated ? "Continue with email or wallet" : "Loading…"}
+            </button>
             <p className="mt-4 text-center text-xs text-ink-faint">
-              New here or returning, we&apos;ll take you to the right place.
+              Email, passkey, or an existing wallet — your choice.
             </p>
-            <p className="mt-6 text-center text-sm text-ink-3">
-              Just looking?{" "}
-              <Link href="/" className="text-teal-deep underline underline-offset-2">
-                Explore with sample data
-              </Link>
-            </p>
-          </form>
+          </div>
         )}
 
         {step === "business" && (
@@ -142,53 +131,31 @@ export default function OnboardingPage() {
           <form onSubmit={handleSupplier}>
             <h1 className="font-display text-3xl tracking-tight">Add a supplier</h1>
             <p className="mt-2 text-ink-2">
-              The first counterparty you&apos;ll pay. You can add more later.
+              The first counterparty you&apos;ll pay. Their wallet address is
+              where USDC settles on-chain — you can add it later if you don&apos;t
+              have it yet.
             </p>
             <Field label="Supplier name" required value={supName} onChange={setSupName} placeholder="e.g. Meridian Components" autoFocus />
             <div className="grid grid-cols-2 gap-3">
               <Field label="City" required value={supCity} onChange={setSupCity} placeholder="Shenzhen" />
               <Field label="Country" required value={supCountry} onChange={setSupCountry} placeholder="China" />
             </div>
+            <Field
+              label="Supplier wallet address (optional)"
+              value={supWallet}
+              onChange={setSupWallet}
+              placeholder="0x…"
+            />
+            {walletAddress && (
+              <p className="mt-4 rounded-[var(--radius-sm)] border border-teal/30 bg-teal-tint/40 px-3.5 py-2.5 text-xs text-teal-deep">
+                Your settlement wallet:{" "}
+                <span className="font-mono">{walletAddress}</span>
+              </p>
+            )}
             <Submit disabled={!supName.trim() || !supCity.trim() || !supCountry.trim()}>
-              Continue
+              Enter Dhow →
             </Submit>
           </form>
-        )}
-
-        {step === "wallet" && (
-          <div>
-            <h1 className="font-display text-3xl tracking-tight">Connect a wallet</h1>
-            <p className="mt-2 text-ink-2">
-              Settlements move in USDC on Polygon. Connect a wallet to settle
-              from, and your supplier is paid directly, on-chain.
-            </p>
-
-            {business?.walletAddress ? (
-              <div className="mt-6 rounded-[var(--radius-card)] border border-teal/30 bg-teal-tint/50 px-5 py-4">
-                <p className="text-xs uppercase tracking-wide text-ink-faint">
-                  Wallet connected
-                </p>
-                <p className="tnum mt-1 font-mono text-lg text-teal-deep">
-                  {business.walletAddress}
-                </p>
-              </div>
-            ) : (
-              <button
-                onClick={handleConnect}
-                className="mt-6 w-full rounded-full border border-line bg-surface py-3 text-sm font-medium text-ink transition-colors hover:border-line-strong"
-              >
-                Connect wallet
-              </button>
-            )}
-
-            <button
-              onClick={() => router.replace("/overview")}
-              disabled={!business?.walletAddress}
-              className="mt-3 w-full rounded-full bg-teal py-3 text-sm font-medium text-white transition-colors hover:bg-teal-deep disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Enter Dhow →
-            </button>
-          </div>
         )}
       </div>
     </div>
