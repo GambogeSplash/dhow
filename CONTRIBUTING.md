@@ -14,13 +14,16 @@ npm install --legacy-peer-deps        # web3 deps need legacy peer resolution
 cd contracts && forge install && cd ..  # pulls the OpenZeppelin submodule
 ```
 
-## Run in simulation (no chain, fastest)
+## Run it (fastest)
 
 ```bash
 npm run dev -- -p 4400
 ```
 
-With no chain env, settlement returns synthetic hashes and the whole flywheel works out of the box. Visit http://localhost:4400 and click **Explore with sample data**.
+Visit http://localhost:4400. A real run needs Privy + a Neon DB + the deployed
+Amoy addresses (see [`docs/SETUP.md`](docs/SETUP.md)); without them the surfaces
+render but the auth/DB/chain paths gate off. To exercise the full chain flow
+end to end with no faucet, use a local chain (next section).
 
 ## Run the full flow on a real local chain
 
@@ -72,12 +75,15 @@ Then set the logged escrow + registry addresses (and the rest) as Vercel env var
 ```
 app/
   page.tsx              landing
-  onboarding/           sign up → business → supplier → wallet
+  onboarding/           sign in (Privy) → business → supplier → wallet
   (app)/                importer: overview, send, corridor, capital, suppliers
   (financier)/          financier: desk, opportunities, deal/[business], portfolio
-  api/                  chain, attest, score, fund, corridors
-components/             CorridorProvider, FinancierProvider, score-viz, AnimatedNumber, Sidebar
-lib/                    corridor (scoring), account, chain, eas, indexer, seed
+  api/                  account, suppliers, corridors, attest, score, borrowers, facilities, faucet
+components/             CorridorProvider, FinancierProvider, Providers, score-viz, AnimatedNumber, Sidebar
+lib/                    corridor (scoring), account, db, store-server, privy-server, chain, chain-client, eas, indexer
 contracts/              Foundry: src/, script/, test/
-docs/                   EXPLAINER, ARCHITECTURE, BRIEF, CHAIN, research/
+docs/                   ONBOARDING, EXPLAINER, ARCHITECTURE, BRIEF, CHAIN, SETUP, research/
 ```
+
+New to the repo? Start with [`docs/ONBOARDING.md`](docs/ONBOARDING.md) for the
+role-by-role walkthrough.
