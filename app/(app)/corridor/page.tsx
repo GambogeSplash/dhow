@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useCorridor } from "@/components/CorridorProvider";
+import { Avatar } from "@/components/Avatar";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import {
   aed,
@@ -202,13 +203,16 @@ function LedgerRow({
   return (
     <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="tnum font-mono text-xs text-ink-faint">{c.ref}</span>
-            <StatusPill c={c} />
+        <div className="flex items-start gap-3">
+          <Avatar name={c.supplier.name} size={36} className="mt-0.5" />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="tnum font-mono text-xs text-ink-faint">{c.ref}</span>
+              <StatusPill c={c} />
+            </div>
+            <p className="mt-1 font-medium">{c.supplier.name}</p>
+            <p className="text-sm text-ink-3">{c.goods}</p>
           </div>
-          <p className="mt-1 font-medium">{c.supplier.name}</p>
-          <p className="text-sm text-ink-3">{c.goods}</p>
         </div>
         <div className="text-right">
           <p className="font-display tnum text-xl">{aed(c.amountAed)}</p>

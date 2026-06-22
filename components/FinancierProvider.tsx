@@ -15,7 +15,7 @@ import { apiListFacilities, apiCreateFacility, apiMarkRepaid } from "@/lib/accou
 import { FINANCIER } from "@/lib/financier";
 import { CHAIN_ID, payOpen } from "@/lib/chain-client";
 import { PREVIEW_MODE } from "@/lib/preview";
-import { SEED_NOW, seedBorrowers, seedFacility } from "@/lib/preview-seed";
+import { SEED_NOW, seedBorrowers, seedFacility, previewTx } from "@/lib/preview-seed";
 
 /*
  * The financier (Creek Capital) side. Borrowers come from the shared database
@@ -103,12 +103,42 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Seeded financier state for local preview (no Privy, no database). */
+/** Seeded, INTERACTIVE financier state for local preview (no Privy, no
+ *  database). Funding and repayment mutate local state so the buttons work;
+ *  nothing is signed or persisted. */
 function FinancierPreview({ children }: { children: React.ReactNode }) {
   const borrowers = seedBorrowers.map((r) =>
     toBorrower(r.business, r.corridors, SEED_NOW, scoreCorridors(r.corridors, SEED_NOW).score),
   );
-  const facilities: Facility[] = [seedFacility];
+  const [facilities, setFacilities] = useState<Facility[]>([seedFacility]);
+
+  const fund = useCallback(
+    async (borrower: Borrower): Promise<{ ok: boolean; error?: string }> => {
+      if (borrower.offerAed <= 0) return { ok: false, error: "No eligible offer." };
+      const tx = previewTx();
+      setFacilities((prev) => [
+        ...prev.filter((f) => f.borrowerId !== borrower.id),
+        {
+          borrowerId: borrower.id,
+          borrowerName: borrower.name,
+          amountAed: borrower.offerAed,
+          fundedAt: SEED_NOW,
+          txHash: tx.txHash,
+          explorerUrl: tx.explorerUrl,
+          repaid: false,
+        },
+      ]);
+      return { ok: true };
+    },
+    [],
+  );
+
+  const markRepaid = useCallback((borrowerId: string) => {
+    setFacilities((prev) =>
+      prev.map((f) => (f.borrowerId === borrowerId ? { ...f, repaid: true } : f)),
+    );
+  }, []);
+
   const deployedAed = facilities.filter((f) => !f.repaid).reduce((s, f) => s + f.amountAed, 0);
   return (
     <Ctx.Provider
@@ -121,8 +151,8 @@ function FinancierPreview({ children }: { children: React.ReactNode }) {
         isAuthenticated: true,
         walletAddress: "0xf15a9c1e000000000000000000000000000000ca",
         login: () => {},
-        fund: async () => ({ ok: false, error: "Preview mode: funding is disabled." }),
-        markRepaid: () => {},
+        fund,
+        markRepaid,
         refresh: () => {},
       }}
     >

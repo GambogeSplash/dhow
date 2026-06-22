@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAccount } from "@/components/CorridorProvider";
+import { Avatar } from "@/components/Avatar";
 import { DhowMark } from "@/components/DhowMark";
 
 type Step = "signin" | "business" | "supplier";
@@ -129,6 +130,19 @@ export default function OnboardingPage() {
 
         {step === "supplier" && (
           <form onSubmit={handleSupplier}>
+            {bizName.trim() && (
+              <div className="mb-5 flex items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-3">
+                <Avatar name={bizName} size={36} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{bizName}</p>
+                  <p className="text-xs text-ink-3">
+                    {city}
+                    {city && country ? ", " : ""}
+                    {country}
+                  </p>
+                </div>
+              </div>
+            )}
             <h1 className="font-display text-3xl tracking-tight">Add a supplier</h1>
             <p className="mt-2 text-ink-2">
               The first counterparty you&apos;ll pay. Their wallet address is

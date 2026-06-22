@@ -1,5 +1,6 @@
 import { DhowMark } from "@/components/DhowMark";
 import { LandingCta, LandingHeaderCta } from "@/components/LandingCta";
+import { PartnerStrip } from "@/components/PartnerStrip";
 
 export default function Home() {
   return (
@@ -38,6 +39,13 @@ export default function Home() {
         <p className="mt-3 text-sm text-ink-faint">
           Pay → settle → score → capital. Sign up in under a minute.
         </p>
+
+        <div className="mt-12 border-t border-line pt-6">
+          <p className="text-xs uppercase tracking-wide text-ink-faint">
+            Settles in native USDC on Polygon
+          </p>
+          <PartnerStrip className="mt-4" />
+        </div>
       </section>
 
       {/* the loop */}

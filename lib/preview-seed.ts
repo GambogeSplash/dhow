@@ -17,7 +17,7 @@ import type { Business, Supplier } from "./account";
 export const SEED_NOW = 1_781_913_600_000; // fixed reference instant (~mid 2026)
 const DAY = 86_400_000;
 
-const EXPLORER = "https://amoy.polygonscan.com/tx/";
+export const EXPLORER = "https://amoy.polygonscan.com/tx/";
 
 /** Deterministic 32-byte hex from a seed string (no Math.random). */
 function fakeHash(seed: string): `0x${string}` {
@@ -26,6 +26,14 @@ function fakeHash(seed: string): `0x${string}` {
     h += "0123456789abcdef"[(seed.charCodeAt(i % seed.length) + i * 7) % 16];
   }
   return `0x${h}` as `0x${string}`;
+}
+
+/** A fresh synthetic tx for preview-mode actions. Event-handler only (uses
+ *  randomness), so it never runs during SSR/hydration. */
+export function previewTx(): { txHash: `0x${string}`; explorerUrl: string } {
+  const seed = `${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random()}`;
+  const txHash = fakeHash(seed);
+  return { txHash, explorerUrl: `${EXPLORER}${txHash}` };
 }
 
 function wallet(seed: string): string {
@@ -103,7 +111,7 @@ function corridors(specs: Spec[]): Corridor[] {
 // ---- the signed-in importer's own corridors (rich, eligible) ----
 
 export const seedBusiness: Business = {
-  id: "preview",
+  id: "al-noor-trading",
   email: "ops@alnoor.ae",
   name: "Al Noor Trading",
   city: "Dubai",

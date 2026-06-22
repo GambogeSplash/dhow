@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCorridor } from "@/components/CorridorProvider";
+import { Avatar } from "@/components/Avatar";
 import { FaucetCard } from "@/components/FaucetCard";
 import {
   aed,
@@ -27,6 +28,7 @@ export default function SendPage() {
   const amountAed = Number(amount.replace(/[^0-9.]/g, "")) || 0;
   const amountUsdc = amountAed > 0 ? makeCorridorUsdc(amountAed) : 0;
   const canSend = !!supplierId && amountAed > 0 && goods.trim().length > 0;
+  const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
   function handleAddSupplier() {
     if (!newSup.name.trim() || !newSup.city.trim() || !newSup.country.trim()) return;
@@ -65,7 +67,11 @@ export default function SendPage() {
           <div className="flex items-center justify-between gap-4">
             <Party label="From" name={business?.name ?? "Your business"} sub={`${business?.city ?? ""}${business?.city ? ", " : ""}${business?.country ?? ""}`} />
             <Arrow />
-            <div className="text-right">
+            <div className="flex items-center gap-3">
+              {!addingSupplier && selectedSupplier && (
+                <Avatar name={selectedSupplier.name} size={36} />
+              )}
+              <div className="text-right">
               <p className="text-xs uppercase tracking-wide text-ink-faint">To</p>
               {addingSupplier ? (
                 <p className="mt-0.5 text-sm text-ink-3">New supplier</p>
@@ -86,6 +92,7 @@ export default function SendPage() {
                   <option value="__add">+ Add supplier…</option>
                 </select>
               )}
+              </div>
             </div>
           </div>
 
@@ -222,10 +229,13 @@ export default function SendPage() {
 
 function Party({ label, name, sub }: { label: string; name: string; sub: string }) {
   return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-ink-faint">{label}</p>
-      <p className="mt-0.5 font-medium">{name}</p>
-      <p className="text-sm text-ink-3">{sub}</p>
+    <div className="flex items-center gap-3">
+      <Avatar name={name} size={36} />
+      <div>
+        <p className="text-xs uppercase tracking-wide text-ink-faint">{label}</p>
+        <p className="mt-0.5 font-medium">{name}</p>
+        <p className="text-sm text-ink-3">{sub}</p>
+      </div>
     </div>
   );
 }
