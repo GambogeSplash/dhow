@@ -25,6 +25,10 @@ Amoy addresses (see [`docs/SETUP.md`](docs/SETUP.md)); without them the surfaces
 render but the auth/DB/chain paths gate off. To exercise the full chain flow
 end to end with no faucet, use a local chain (next section).
 
+To just look at the importer and financier surfaces with no Privy and no
+database, set `NEXT_PUBLIC_PREVIEW_MODE=1` in `.env.local` and restart. The pages
+render with empty state and actions disabled. Local only, never in production.
+
 ## Run the full flow on a real local chain
 
 This exercises real contracts, real EAS attestations, real escrow release, real on-chain score, and a real fund transfer, with no faucet.

@@ -39,6 +39,7 @@ import {
   refundCorridor,
 } from "@/lib/chain-client";
 import { FINANCIER } from "@/lib/financier";
+import { PREVIEW_MODE } from "@/lib/preview";
 
 const PROOF_LABEL = "Bill of lading · Jebel Ali inbound";
 const INSPECTOR = "Gulf Inspectorate";
@@ -132,6 +133,53 @@ function newSupplierId(): string {
 }
 
 export function CorridorProvider({ children }: { children: React.ReactNode }) {
+  return PREVIEW_MODE ? (
+    <CorridorPreview>{children}</CorridorPreview>
+  ) : (
+    <CorridorLive>{children}</CorridorLive>
+  );
+}
+
+/** Empty onboarded workspace for local preview (no Privy, no database), so the
+ *  importer surfaces render with their empty states and no redirect. */
+function CorridorPreview({ children }: { children: React.ReactNode }) {
+  const business: Business = {
+    id: "preview",
+    email: "preview@dhow.app",
+    name: "Preview Trading",
+    city: "Dubai",
+    country: "UAE",
+    walletAddress: undefined,
+    createdAt: 0,
+  };
+  const score = scoreCorridors([], 0);
+  const value: WorkspaceState = {
+    hydrated: true,
+    business,
+    suppliers: [],
+    financier: FINANCIER,
+    isAuthenticated: true,
+    isOnboarded: true,
+    walletAddress: undefined,
+    login: () => {},
+    saveBusiness: () => {},
+    addSupplier: (s) => ({ id: "preview", createdAt: 0, ...s }),
+    signOut: () => {},
+    corridors: [],
+    score,
+    prevScore: 0,
+    offerAed: 0,
+    offerAccepted: false,
+    sendPayment: () => null,
+    attest: () => {},
+    refund: () => {},
+    retry: () => {},
+    acceptOffer: () => {},
+  };
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+function CorridorLive({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const [now] = useState(() => Date.now());

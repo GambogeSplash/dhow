@@ -14,6 +14,7 @@ import type { Business } from "@/lib/account";
 import { apiListFacilities, apiCreateFacility, apiMarkRepaid } from "@/lib/account";
 import { FINANCIER } from "@/lib/financier";
 import { CHAIN_ID, payOpen } from "@/lib/chain-client";
+import { PREVIEW_MODE } from "@/lib/preview";
 
 /*
  * The financier (Creek Capital) side. Borrowers come from the shared database
@@ -94,6 +95,37 @@ function newFacilityId(): string {
 const Ctx = createContext<FinancierState | null>(null);
 
 export function FinancierProvider({ children }: { children: React.ReactNode }) {
+  return PREVIEW_MODE ? (
+    <FinancierPreview>{children}</FinancierPreview>
+  ) : (
+    <FinancierLive>{children}</FinancierLive>
+  );
+}
+
+/** Empty, unauthenticated state for local preview (no Privy, no database). */
+function FinancierPreview({ children }: { children: React.ReactNode }) {
+  return (
+    <Ctx.Provider
+      value={{
+        financier: FINANCIER,
+        borrowers: [],
+        facilities: [],
+        deployedAed: 0,
+        availableAed: FINANCIER.appetiteAed,
+        isAuthenticated: false,
+        walletAddress: undefined,
+        login: () => {},
+        fund: async () => ({ ok: false, error: "Preview mode: funding is disabled." }),
+        markRepaid: () => {},
+        refresh: () => {},
+      }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
+}
+
+function FinancierLive({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);

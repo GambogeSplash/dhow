@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http } from "viem";
 import { CorridorProvider } from "./CorridorProvider";
 import { dhowChain } from "@/lib/chain-client";
+import { PREVIEW_MODE } from "@/lib/preview";
 
 /*
  * The authenticated stack: Privy (identity + embedded wallet) → Wagmi (chain
@@ -24,6 +25,10 @@ const wagmiConfig = createConfig({
 /** Privy + Wagmi + React Query shell, shared by the importer and financier
  *  surfaces. Renders a setup notice instead of crashing when Privy is unset. */
 export function PrivyStack({ children }: { children: React.ReactNode }) {
+  // Preview mode: skip the auth/wallet stack entirely. The providers below
+  // serve empty preview state, so the surfaces render without Privy.
+  if (PREVIEW_MODE) return <>{children}</>;
+
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
   if (!appId) {
