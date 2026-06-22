@@ -15,6 +15,7 @@ import { apiListFacilities, apiCreateFacility, apiMarkRepaid } from "@/lib/accou
 import { FINANCIER } from "@/lib/financier";
 import { CHAIN_ID, payOpen } from "@/lib/chain-client";
 import { PREVIEW_MODE } from "@/lib/preview";
+import { SEED_NOW, seedBorrowers, seedFacility } from "@/lib/preview-seed";
 
 /*
  * The financier (Creek Capital) side. Borrowers come from the shared database
@@ -102,18 +103,23 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Empty, unauthenticated state for local preview (no Privy, no database). */
+/** Seeded financier state for local preview (no Privy, no database). */
 function FinancierPreview({ children }: { children: React.ReactNode }) {
+  const borrowers = seedBorrowers.map((r) =>
+    toBorrower(r.business, r.corridors, SEED_NOW, scoreCorridors(r.corridors, SEED_NOW).score),
+  );
+  const facilities: Facility[] = [seedFacility];
+  const deployedAed = facilities.filter((f) => !f.repaid).reduce((s, f) => s + f.amountAed, 0);
   return (
     <Ctx.Provider
       value={{
         financier: FINANCIER,
-        borrowers: [],
-        facilities: [],
-        deployedAed: 0,
-        availableAed: FINANCIER.appetiteAed,
-        isAuthenticated: false,
-        walletAddress: undefined,
+        borrowers,
+        facilities,
+        deployedAed,
+        availableAed: Math.max(0, FINANCIER.appetiteAed - deployedAed),
+        isAuthenticated: true,
+        walletAddress: "0xf15a9c1e000000000000000000000000000000ca",
         login: () => {},
         fund: async () => ({ ok: false, error: "Preview mode: funding is disabled." }),
         markRepaid: () => {},

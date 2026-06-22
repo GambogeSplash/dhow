@@ -40,6 +40,7 @@ import {
 } from "@/lib/chain-client";
 import { FINANCIER } from "@/lib/financier";
 import { PREVIEW_MODE } from "@/lib/preview";
+import { SEED_NOW, seedBusiness, seedSuppliers, seedCorridors } from "@/lib/preview-seed";
 
 const PROOF_LABEL = "Bill of lading · Jebel Ali inbound";
 const INSPECTOR = "Gulf Inspectorate";
@@ -140,35 +141,26 @@ export function CorridorProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Empty onboarded workspace for local preview (no Privy, no database), so the
- *  importer surfaces render with their empty states and no redirect. */
+/** Seeded onboarded workspace for local preview (no Privy, no database), so the
+ *  importer surfaces render fully populated and never redirect to onboarding. */
 function CorridorPreview({ children }: { children: React.ReactNode }) {
-  const business: Business = {
-    id: "preview",
-    email: "preview@dhow.app",
-    name: "Preview Trading",
-    city: "Dubai",
-    country: "UAE",
-    walletAddress: undefined,
-    createdAt: 0,
-  };
-  const score = scoreCorridors([], 0);
+  const score = scoreCorridors(seedCorridors, SEED_NOW);
   const value: WorkspaceState = {
     hydrated: true,
-    business,
-    suppliers: [],
+    business: seedBusiness,
+    suppliers: seedSuppliers,
     financier: FINANCIER,
     isAuthenticated: true,
     isOnboarded: true,
-    walletAddress: undefined,
+    walletAddress: seedBusiness.walletAddress,
     login: () => {},
     saveBusiness: () => {},
-    addSupplier: (s) => ({ id: "preview", createdAt: 0, ...s }),
+    addSupplier: (s) => ({ id: "preview", ...s }),
     signOut: () => {},
-    corridors: [],
+    corridors: seedCorridors,
     score,
-    prevScore: 0,
-    offerAed: 0,
+    prevScore: Math.max(0, score.score - 8),
+    offerAed: advanceOffer(score),
     offerAccepted: false,
     sendPayment: () => null,
     attest: () => {},
