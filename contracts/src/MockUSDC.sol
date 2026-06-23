@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 /// @title MockUSDC — 6-decimal ERC-20 standing in for native USDC on testnet.
 /// @notice Open `mint` so the demo never needs a faucet for the settlement asset.
