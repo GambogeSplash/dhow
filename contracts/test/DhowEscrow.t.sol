@@ -4,7 +4,7 @@ pragma solidity 0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {MockUSDC} from "../src/MockUSDC.sol";
 import {DhowEscrow} from "../src/DhowEscrow.sol";
-import {Attestation} from "../src/interfaces/IEAS.sol";
+import {IEAS} from "../src/interfaces/IEAS.sol";
 import {MockEAS} from "./mocks/MockEAS.sol";
 
 contract DhowEscrowTest is Test {
@@ -40,9 +40,9 @@ contract DhowEscrowTest is Test {
     function _attestation(bytes32 corridorId, bytes32 schema, address attester)
         internal
         pure
-        returns (Attestation memory)
+        returns (IEAS.Attestation memory)
     {
-        return Attestation({
+        return IEAS.Attestation({
             uid: keccak256(abi.encode(corridorId, attester)),
             schema: schema,
             time: 0,
@@ -56,7 +56,7 @@ contract DhowEscrowTest is Test {
         });
     }
 
-    function _setAttestation(bytes32 uid, Attestation memory att) internal {
+    function _setAttestation(bytes32 uid, IEAS.Attestation memory att) internal {
         eas.set(uid, att);
     }
 
@@ -103,7 +103,7 @@ contract DhowEscrowTest is Test {
     function test_RejectsRevokedAttestation() public {
         _lock();
         bytes32 uid = keccak256("att-revoked");
-        Attestation memory att = _attestation(CID, SCHEMA, inspector);
+        IEAS.Attestation memory att = _attestation(CID, SCHEMA, inspector);
         att.revocationTime = uint64(block.timestamp);
         _setAttestation(uid, att);
 

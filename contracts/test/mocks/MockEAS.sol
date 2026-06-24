@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import {IEAS, Attestation} from "../../src/interfaces/IEAS.sol";
+import {IEAS} from "../../src/interfaces/IEAS.sol";
 
 /// @notice A minimal, EAS-interface-compatible on-chain attestation registry.
 ///         Used as the Dhow attestation contract until a chain has canonical
@@ -9,7 +9,7 @@ import {IEAS, Attestation} from "../../src/interfaces/IEAS.sol";
 ///         caller is the attester), and `getAttestation` is what DhowEscrow
 ///         reads to verify a shipment proof. `set` is a test convenience.
 contract MockEAS is IEAS {
-    mapping(bytes32 => Attestation) internal _attestations;
+    mapping(bytes32 => IEAS.Attestation) internal _attestations;
     uint256 public nonce;
 
     event Attested(bytes32 indexed uid, bytes32 indexed schema, address indexed attester, address recipient);
@@ -20,7 +20,7 @@ contract MockEAS is IEAS {
         returns (bytes32 uid)
     {
         uid = keccak256(abi.encode(schema, msg.sender, recipient, data, nonce++));
-        _attestations[uid] = Attestation({
+        _attestations[uid] = IEAS.Attestation({
             uid: uid,
             schema: schema,
             time: uint64(block.timestamp),
@@ -36,11 +36,11 @@ contract MockEAS is IEAS {
     }
 
     /// @notice Test helper: set a full attestation record for a uid directly.
-    function set(bytes32 uid, Attestation memory att) external {
+    function set(bytes32 uid, IEAS.Attestation memory att) external {
         _attestations[uid] = att;
     }
 
-    function getAttestation(bytes32 uid) external view returns (Attestation memory) {
+    function getAttestation(bytes32 uid) external view returns (IEAS.Attestation memory) {
         return _attestations[uid];
     }
 }

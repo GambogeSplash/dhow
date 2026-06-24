@@ -8,12 +8,12 @@ pragma solidity 0.8.24;
 /// @notice Minimal slice of the EAS interface DhowEscrow depends on.
 interface IEAS {
     struct Attestation {
-        bytes32 uid; // Unique identifier of the attestation.
+        bytes32 uid; // Unique identifier of the attestation. question: how do users, banks, finaciers get this uid?
         bytes32 schema; // Schema of the attestation.
         uint64 time; // Timestamp of the attestation.
         uint64 expirationTime; // Timestamp of the attestation expiration.
         uint64 revocationTime; // Timestamp of the attestation revocation.
-        bytes32 refUID; // UID of the attestation this attestation is a reference to.
+        bytes32 refUid; // UID of the attestation this attestation is a reference to.
         address recipient; // Address of the attestation recipient.
         address attester; // Address of the attestation attester.
         bool revocable; // Whether the attestation is revocable.

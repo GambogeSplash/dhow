@@ -4,9 +4,9 @@ pragma solidity 0.8.24;
 /// @title MockUSDC — 6-decimal ERC-20 standing in for native USDC on testnet.
 /// @notice Open `mint` so the demo never needs a faucet for the settlement asset.
 contract MockUSDC {
-    string public constant name = "Mock USD Coin";
-    string public constant symbol = "USDC";
-    uint8 public constant decimals = 6;
+    string public constant S_NAME = "Mock USD Coin";
+    string public constant S_SYMBOL = "USDC";
+    uint8 public constant S_DECIMALS = 6;
 
     uint256 public totalSupply;
     mapping(address => uint256) public balanceOf;
