@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IEAS, Attestation} from "./interfaces/IEAS.sol";
+import {IEAS} from "./interfaces/IEAS.sol";
 
 /// @title DhowEscrow — Proof-Lock conditional settlement.
 /// @notice Holds USDC for a corridor and releases to the supplier when the
@@ -110,7 +110,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     function releaseWithAttestation(bytes32 corridorId, bytes32 attestationUid) external nonReentrant {
         if (!requireEas) revert EasRequired(); // when EAS is off, use releaseByInspector
 
-        Attestation memory att = eas.getAttestation(attestationUid);
+        IEAS.Attestation memory att = eas.getAttestation(attestationUid);
         if (att.schema != shipmentSchema) revert WrongSchema();
         if (att.revocationTime != 0) revert AttestationRevoked();
         if (att.expirationTime != 0 && att.expirationTime <= block.timestamp) revert AttestationExpired();

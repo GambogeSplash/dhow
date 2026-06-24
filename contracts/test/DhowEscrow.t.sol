@@ -37,7 +37,11 @@ contract DhowEscrowTest is Test {
 
     /// @dev Build a valid shipment-proof attestation for a corridor. The schema
     ///      leads with the corridorId (static bytes32), matching the on-chain decode.
-    function _attestation(bytes32 corridorId, bytes32 schema, address attester) internal pure returns (Attestation memory) {
+    function _attestation(bytes32 corridorId, bytes32 schema, address attester)
+        internal
+        pure
+        returns (Attestation memory)
+    {
         return Attestation({
             uid: keccak256(abi.encode(corridorId, attester)),
             schema: schema,
