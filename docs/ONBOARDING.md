@@ -59,11 +59,11 @@ Everything under `contracts/`. You own the on-chain truth layer.
 
 | File | What it is |
 | --- | --- |
-| `contracts/src/DhowEscrow.sol` | The Proof-Lock. `lock` → `releaseWithAttestation` (EAS-gated, permissionless once a valid attestation exists) → `refund` (after deadline). `releaseByInspector` is the owner-gated fallback. `corridorId = keccak256(ref)` is the universal key. |
-| `contracts/src/DhowScoreRegistry.sol` | On-chain credit reputation. `postScore` (poster-only), `scoreOf`, `isEligible`. The financier reads this directly from chain. |
+| `contracts/src/DhowEscrow.sol` | The Proof-Lock. `lock` → `releaseWithAttestation` (EAS-gated, permissionless once a valid attestation exists) → `refund` (after deadline). `releaseByInspector` is the owner-gated fallback. On every release/refund it calls the registry's `recordSettlement` in the **same transaction** (wrapped in try/catch so accounting can never block the money). `corridorId = keccak256(ref)` is the universal key. |
+| `contracts/src/DhowScoreRegistry.sol` | On-chain credit reputation, computed from facts. `recordSettlement` is **escrow-only** (the `recorder`); `scoreOf` / `isEligible` compute the live score on-chain from the raw `statsOf` facts. No off-chain poster — the financier reads a number that moves with the money even if Dhow's backend is down. |
 | `contracts/src/MockUSDC.sol` | 6-dp open-mint test token. Stand-in for Circle USDC. |
 | `contracts/src/interfaces/IEAS.sol` | Minimal vendored EAS interface so the escrow verifies attestations without a heavy dep. `test/mocks/MockEAS.sol` is the EAS-compatible stand-in used on Amoy. |
-| `contracts/test/*.t.sol` | 15 passing tests (11 escrow incl. every rejection + fallback, 4 registry). |
+| `contracts/test/*.t.sol` | 23 passing tests (14 escrow incl. every rejection, the on-chain settlement recording + fallback, 9 registry incl. fact accumulation, performance/cadence decay). |
 | `contracts/script/Deploy.s.sol` / `DeployCore.s.sol` | Full deploy / lean reuse deploy. |
 | `aderyn.toml` | Static analysis config (already wired). |
 

@@ -7,6 +7,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IEAS} from "./interfaces/IEAS.sol";
 
+/// @notice The slice of the score registry the escrow writes to. Kept local so
+///         the escrow has no compile-time dependency on the registry contract.
+interface IDhowScoreRegistry {
+    function recordSettlement(address business, uint256 amount, bool success, bytes32 attestationUid) external;
+}
+
 /// @title DhowEscrow — Proof-Lock conditional settlement.
 /// @notice Holds USDC for a corridor and releases to the supplier when the
 ///         shipment proof is attested. The release is gated on a real EAS
@@ -66,6 +72,12 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /// @notice When true, release requires a valid EAS attestation. The owner can flip this off as a stage fallback if EAS is unavailable.
     bool public requireEas;
 
+    /// @notice On-chain credit registry notified atomically on every settlement.
+    ///         When unset (address(0)) settlement still works; only the on-chain
+    ///         reputation side-effect is skipped. The registry call can never
+    ///         block a release/refund (it is wrapped in try/catch).
+    IDhowScoreRegistry public registry;
+
     mapping(bytes32 corridorId => Lock) public locks;
 
     /*/////////////////////////////////////////////////////////
@@ -78,8 +90,14 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     event Refunded(bytes32 indexed corridorId, address indexed payer, uint256 amount);
     event InspectorChanged(address indexed inspector);
     event RequireEasChanged(bool requireEas);
+    event RegistryChanged(address indexed registry);
+    /// @notice Emitted when settlement succeeded but the registry notification
+    ///         reverted. Money moved; only the reputation write was skipped.
+    event SettlementRecordFailed(bytes32 indexed corridorId, address indexed business, bool success);
 
-    constructor(address token_, address eas_, bytes32 shipmentSchema_, address inspector_) Ownable(msg.sender) {
+    constructor(address token_, address eas_, bytes32 shipmentSchema_, address inspector_, address registry_)
+        Ownable(msg.sender)
+    {
         if (token_ == address(0)) revert DhowEscrow__InvalidSupplier();
         if (inspector_ == address(0)) revert DhowEscrow__InvalidInspector();
 
@@ -88,6 +106,14 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         I_SHIPMENT_SCHEMA = shipmentSchema_;
         inspector = inspector_;
         requireEas = true;
+        registry = IDhowScoreRegistry(registry_);
+    }
+
+    /// @notice Point the escrow at the on-chain score registry. The registry
+    ///         must in turn set this escrow as its `recorder`.
+    function setRegistry(address registry_) external onlyOwner {
+        registry = IDhowScoreRegistry(registry_);
+        emit RegistryChanged(registry_);
     }
 
     function setInspector(address inspector_) external onlyOwner {
@@ -158,13 +184,22 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         bytes32 attestedCorridor = abi.decode(att.data, (bytes32));
         if (attestedCorridor != corridorId) revert DhowEscrow__CorridorMismatch();
 
-        _release(corridorId, attestationUid);
+        _settle(corridorId, attestationUid);
     }
 
-    function _release(bytes32 corridorId, bytes32 attestationUid) internal {
+    /// @dev Inspector fallback path, gated on EAS being turned off. The release
+    ///      itself is performed by the shared `_settle` core.
+    function _release(bytes32 corridorId, bytes32 proofRef) internal {
         if (requireEas) revert DhowEscrow__EasRequired();
         if (msg.sender != inspector) revert DhowEscrow__NotInspector();
+        _settle(corridorId, proofRef);
+    }
 
+    /// @dev The settlement core, shared by the attestation and inspector paths.
+    ///      Moves the money, then records the settlement fact on-chain in the
+    ///      same transaction. The release-path guards live in the callers, so
+    ///      this never carries a contradictory `requireEas` condition.
+    function _settle(bytes32 corridorId, bytes32 attestationUid) internal {
         Lock storage l = locks[corridorId];
         if (l.status != Status.Locked) revert DhowEscrow__NotLocked();
 
@@ -172,6 +207,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         I_TOKEN.safeTransfer(l.supplier, l.amount);
 
         emit Released(corridorId, l.supplier, l.amount, attestationUid);
+        _recordSettlement(corridorId, l.payer, l.amount, true, attestationUid);
     }
 
     function _refund(bytes32 corridorId) internal {
@@ -183,6 +219,21 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         I_TOKEN.safeTransfer(l.payer, l.amount);
 
         emit Refunded(corridorId, l.payer, l.amount);
+        _recordSettlement(corridorId, l.payer, l.amount, false, bytes32(0));
+    }
+
+    /// @dev Notify the on-chain registry of a settlement. Wrapped in try/catch so
+    ///      a misconfigured or paused registry can never block the money moving;
+    ///      a failed notification surfaces as an event for off-chain repair.
+    function _recordSettlement(bytes32 corridorId, address business, uint256 amount, bool success, bytes32 attestationUid)
+        internal
+    {
+        IDhowScoreRegistry r = registry;
+        if (address(r) == address(0)) return;
+        try r.recordSettlement(business, amount, success, attestationUid) {}
+        catch {
+            emit SettlementRecordFailed(corridorId, business, success);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////

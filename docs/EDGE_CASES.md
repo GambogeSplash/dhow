@@ -184,6 +184,30 @@ matrix. Update the status as cases get covered.
 | Input injection via business/supplier/goods fields | Sanitise and bound length | Open |
 | Mainnet without audit | Gated; testnet only until audited | Handled by policy |
 
+## 16. Financing deal lifecycle (request → negotiate → fund → repay)
+
+The working-capital deal is the shared object both sides act on (`lib/deal.ts`,
+`/api/deals`). Transitions are validated by a pure state machine; the API resolves
+the caller's party and rejects illegal moves with 409.
+
+| Scenario | Expected | Status |
+| --- | --- | --- |
+| Borrower requests below eligibility (score < 70) | Request UI gated; cannot open a deal until eligible | Handled (`/capital` gates on `score.eligible`) |
+| Borrower requests above their headroom | Blocked client-side with the headroom shown; server clamps terms | Handled (`TermsEditor` maxAmount + `clampTerms`) |
+| Out-of-turn move (e.g. financier accepts their own offer) | Rejected; only the party whose turn it is may act | Handled (`permissions` + `applyAction`, 409) |
+| Acting on someone else's deal | Forbidden; party resolved from the verified DID | Handled (`partyFor`, 403) |
+| Counter ping-pong | Each counter flips the turn and appends a timeline event | Handled (`DealThread` shows the full thread) |
+| Borrower withdraws / financier declines mid-negotiation | Deal closes terminally; no further moves | Handled (`withdrawn` / `declined`) |
+| Fund an un-agreed deal | Rejected until status is `agreed` | Handled (`canFund` only when agreed) |
+| Funding tx fails on chain | No state transition recorded; error surfaced | Handled (sign first, record only on success) |
+| Reputation accounting blocks settlement | Never; escrow records to the registry in try/catch | Handled (`_recordSettlement`) |
+| Repay sends to the wrong address | Repayment targets the stored `financierWallet` captured at fund time | Handled (`financier_wallet` column) |
+| Terms rounding / fee precision | Clamped + rounded deterministically; total = principal + flat fee | Handled (`clampTerms`, `totalRepayableAed`) |
+| Both sides view the same deal | One row, two perspectives (`statusLabel(deal, viewer)`) | Handled |
+| Financier offers proactively (no prior request) | Deal opens directly in `offered` | Handled (`openOffer`, `apiOfferToBorrower`) |
+| Stale view (other party moved since load) | Borrower/financier providers poll every 6s to reconcile | Partial (poll; a 409 on a stale action is surfaced) |
+| Multiple open deals for one borrower | `activeDeal` picks the newest open/active; older ones remain in history | Handled (`pickActiveDeal`) |
+
 ---
 
 ## How to use this list

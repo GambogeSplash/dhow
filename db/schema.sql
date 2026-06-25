@@ -63,3 +63,51 @@ CREATE TABLE IF NOT EXISTS facilities (
   funded_at       BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS facilities_financier_idx ON facilities(financier_id);
+
+-- Working-capital DEALS: the shared negotiation object both sides act on. A deal
+-- carries the request, the live terms, the funding tx and the repayment through
+-- one lifecycle (requested → offered/countered → agreed → funded → repaid, or
+-- declined/withdrawn). The financier_id is null while a request is still open to
+-- the desk. This supersedes the one-bit `facilities` table above.
+CREATE TABLE IF NOT EXISTS deals (
+  id                 TEXT PRIMARY KEY,
+  borrower_id        TEXT NOT NULL,               -- importer Privy DID
+  borrower_name      TEXT NOT NULL,
+  financier_id       TEXT,                         -- funder Privy DID (null = open request)
+  financier_name     TEXT,
+  status             TEXT NOT NULL,                -- requested|offered|countered|agreed|funded|repaid|declined|withdrawn
+  turn               TEXT NOT NULL,                -- borrower | financier (whose move)
+  amount_aed         DOUBLE PRECISION NOT NULL,    -- live terms: principal
+  rate_pct           DOUBLE PRECISION NOT NULL,    -- live terms: flat financing fee %
+  tenor_days         INTEGER NOT NULL,             -- live terms: repayment window
+  purpose            TEXT,
+  financier_wallet   TEXT,                          -- funding address (repayment target)
+  funded_at          BIGINT,
+  tx_hash            TEXT,
+  explorer_url       TEXT,
+  due_at             BIGINT,
+  repaid_at          BIGINT,
+  repay_tx_hash      TEXT,
+  repay_explorer_url TEXT,
+  created_at         BIGINT NOT NULL,
+  updated_at         BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS deals_borrower_idx ON deals(borrower_id);
+CREATE INDEX IF NOT EXISTS deals_financier_idx ON deals(financier_id);
+CREATE INDEX IF NOT EXISTS deals_status_idx ON deals(status);
+
+-- The negotiation timeline: one row per move (request, offer, counter, accept,
+-- fund, repay, decline, message). This is what makes a deal feel like a real
+-- back-and-forth — both parties read the same thread.
+CREATE TABLE IF NOT EXISTS deal_events (
+  id          TEXT PRIMARY KEY,
+  deal_id     TEXT NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+  actor       TEXT NOT NULL,                       -- borrower | financier | system
+  kind        TEXT NOT NULL,
+  amount_aed  DOUBLE PRECISION,
+  rate_pct    DOUBLE PRECISION,
+  tenor_days  INTEGER,
+  note        TEXT,
+  created_at  BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS deal_events_deal_idx ON deal_events(deal_id, created_at);

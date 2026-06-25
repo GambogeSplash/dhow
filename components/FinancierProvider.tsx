@@ -11,18 +11,40 @@ import {
   scoreCorridors,
 } from "@/lib/corridor";
 import type { Business } from "@/lib/account";
-import { apiListFacilities, apiCreateFacility, apiMarkRepaid } from "@/lib/account";
+import {
+  apiListFacilities,
+  apiCreateFacility,
+  apiMarkRepaid,
+  apiFinancierDeals,
+  apiDealAction,
+  apiOfferToBorrower,
+  type DealActionInput,
+} from "@/lib/account";
 import { FINANCIER } from "@/lib/financier";
 import { CHAIN_ID, payOpen } from "@/lib/chain-client";
+import {
+  applyAction,
+  dealUsdc,
+  type Deal,
+  type DealTerms,
+} from "@/lib/deal";
 import { PREVIEW_MODE } from "@/lib/preview";
-import { SEED_NOW, seedBorrowers, seedFacility, previewTx } from "@/lib/preview-seed";
+import {
+  SEED_NOW,
+  seedBorrowers,
+  seedFacility,
+  seedFinancierDeals,
+  previewTx,
+} from "@/lib/preview-seed";
 
 /*
  * The financier (Creek Capital) side. Borrowers come from the shared database
  * via /api/borrowers (real, cross-machine), with the on-chain verified Credit
- * Score overlaid from the registry. Funding is a REAL on-chain USDC transfer
- * the financier signs from their own Privy wallet to the borrower's wallet; the
- * facility (with its settlement tx) persists in the database.
+ * Score overlaid from the registry. The working-capital lifecycle runs on the
+ * shared deal object (request → offer/counter → accept → fund → repay): the
+ * financier negotiates terms and disburses with a REAL on-chain USDC transfer
+ * it signs from its own Privy wallet to the borrower's wallet. The funded deal
+ * (with its settlement tx) persists in the database.
  */
 
 export interface Borrower {
@@ -59,10 +81,26 @@ interface FinancierState {
   fund: (borrower: Borrower) => Promise<{ ok: boolean; error?: string }>;
   markRepaid: (borrowerId: string) => void;
   refresh: () => void;
+
+  // working-capital deals (the negotiation, financier side)
+  deals: Deal[]; // deals this financier is engaged on
+  requests: Deal[]; // open requests on the desk, unclaimed
+  dealAction: (input: DealActionInput) => Promise<void>;
+  offerToBorrower: (input: {
+    borrowerId: string;
+    borrowerName: string;
+    terms: DealTerms;
+    note?: string;
+  }) => Promise<void>;
 }
 
 function isFullAddress(a?: string): boolean {
   return !!a && /^0x[0-9a-fA-F]{40}$/.test(a);
+}
+
+/** Capital deployed = the sum of funded (not yet repaid) deal advances. */
+function deployedFromDeals(deals: Deal[]): number {
+  return deals.filter((d) => d.status === "funded").reduce((s, d) => s + d.terms.amountAed, 0);
 }
 
 function toBorrower(
@@ -104,13 +142,19 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** Seeded, INTERACTIVE financier state for local preview (no Privy, no
- *  database). Funding and repayment mutate local state so the buttons work;
+ *  database). Negotiation and funding mutate local state so the buttons work;
  *  nothing is signed or persisted. */
 function FinancierPreview({ children }: { children: React.ReactNode }) {
   const borrowers = seedBorrowers.map((r) =>
     toBorrower(r.business, r.corridors, SEED_NOW, scoreCorridors(r.corridors, SEED_NOW).score),
   );
   const [facilities, setFacilities] = useState<Facility[]>([seedFacility]);
+  const [deals, setDeals] = useState<Deal[]>(() =>
+    seedFinancierDeals.filter((d) => d.financierId),
+  );
+  const [requests, setRequests] = useState<Deal[]>(() =>
+    seedFinancierDeals.filter((d) => !d.financierId),
+  );
 
   const fund = useCallback(
     async (borrower: Borrower): Promise<{ ok: boolean; error?: string }> => {
@@ -139,7 +183,65 @@ function FinancierPreview({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const deployedAed = facilities.filter((f) => !f.repaid).reduce((s, f) => s + f.amountAed, 0);
+  // Preview deal actions mutate local state through the same pure state machine
+  // the server uses, so the negotiation behaves identically without a backend.
+  // A requested deal the financier engages (offer/counter/decline) graduates
+  // from the open-requests inbox into the financier's engaged deals.
+  const dealAction = useCallback<FinancierState["dealAction"]>(async (input) => {
+    const apply = (d: Deal): Deal => {
+      switch (input.action) {
+        case "offer":
+          return applyAction(
+            d,
+            {
+              kind: "offer",
+              by: "financier",
+              financierId: FINANCIER.id,
+              financierName: FINANCIER.name,
+              terms: input.terms,
+              note: input.note,
+            },
+            SEED_NOW,
+          );
+        case "counter":
+          return applyAction(d, { kind: "counter", by: "financier", terms: input.terms, note: input.note }, SEED_NOW);
+        case "accept":
+          return applyAction(d, { kind: "accept", by: "financier" }, SEED_NOW);
+        case "decline":
+          return applyAction(d, { kind: "decline", by: "financier", note: input.note }, SEED_NOW);
+        case "fund": {
+          const tx = previewTx();
+          return applyAction(
+            d,
+            { kind: "fund", by: "financier", txHash: tx.txHash, explorerUrl: tx.explorerUrl, financierWallet: PREVIEW_WALLET },
+            SEED_NOW,
+          );
+        }
+        default:
+          return d;
+      }
+    };
+
+    // Acting on an unclaimed request claims it onto the desk.
+    const request = requests.find((d) => d.id === input.dealId);
+    if (request) {
+      const next = apply(request);
+      setRequests((prev) => prev.filter((d) => d.id !== input.dealId));
+      setDeals((prev) => [next, ...prev]);
+      return;
+    }
+    setDeals((prev) => prev.map((d) => (d.id === input.dealId ? apply(d) : d)));
+  }, [requests]);
+
+  const offerToBorrower = useCallback<FinancierState["offerToBorrower"]>(
+    async ({ borrowerId, borrowerName, terms, note }) => {
+      const deal = openOfferLocal({ borrowerId, borrowerName, terms, note });
+      setDeals((prev) => [deal, ...prev]);
+    },
+    [],
+  );
+
+  const deployedAed = deployedFromDeals(deals);
   return (
     <Ctx.Provider
       value={{
@@ -149,11 +251,15 @@ function FinancierPreview({ children }: { children: React.ReactNode }) {
         deployedAed,
         availableAed: Math.max(0, FINANCIER.appetiteAed - deployedAed),
         isAuthenticated: true,
-        walletAddress: "0xf15a9c1e000000000000000000000000000000ca",
+        walletAddress: PREVIEW_WALLET,
         login: () => {},
         fund,
         markRepaid,
         refresh: () => {},
+        deals,
+        requests,
+        dealAction,
+        offerToBorrower,
       }}
     >
       {children}
@@ -161,14 +267,50 @@ function FinancierPreview({ children }: { children: React.ReactNode }) {
   );
 }
 
+const PREVIEW_WALLET = "0xf15a9c1e000000000000000000000000000000ca";
+
+/** Build a proactive offer locally (preview), mirroring openOffer on the server. */
+function openOfferLocal(args: {
+  borrowerId: string;
+  borrowerName: string;
+  terms: DealTerms;
+  note?: string;
+}): Deal {
+  const ev = {
+    id: `ev_${Math.random().toString(36).slice(2, 14)}`,
+    actor: "financier" as const,
+    kind: "offered" as const,
+    terms: args.terms,
+    note: args.note,
+    createdAt: SEED_NOW,
+  };
+  return {
+    id: `deal_${Math.random().toString(36).slice(2, 14)}`,
+    borrowerId: args.borrowerId,
+    borrowerName: args.borrowerName,
+    financierId: FINANCIER.id,
+    financierName: FINANCIER.name,
+    status: "offered",
+    turn: "borrower",
+    terms: args.terms,
+    createdAt: SEED_NOW,
+    updatedAt: SEED_NOW,
+    events: [ev],
+  };
+}
+
 function FinancierLive({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [requests, setRequests] = useState<Deal[]>([]);
 
   const walletsRef = useRef(wallets);
   walletsRef.current = wallets;
+  const borrowersRef = useRef<Borrower[]>(borrowers);
+  borrowersRef.current = borrowers;
   const embedded = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
   const isAuthenticated = ready && authenticated;
 
@@ -202,6 +344,23 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
           repaid: f.repaid,
         })),
       );
+    } catch {
+      /* not configured / unauthenticated */
+    }
+  }, [authenticated, token]);
+
+  const loadDeals = useCallback(async () => {
+    if (!authenticated) {
+      setDeals([]);
+      setRequests([]);
+      return;
+    }
+    try {
+      const t = await token();
+      if (!t) return;
+      const { deals: engaged, requests: open } = await apiFinancierDeals(t);
+      setDeals(engaged);
+      setRequests(open);
     } catch {
       /* not configured / unauthenticated */
     }
@@ -249,6 +408,15 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void loadFacilities();
   }, [loadFacilities]);
+
+  // The borrower may act between the financier's visits; poll so an incoming
+  // counter/accept and fresh requests land without a manual refresh.
+  useEffect(() => {
+    void loadDeals();
+    if (!authenticated) return;
+    const iv = setInterval(() => void loadDeals(), 6000);
+    return () => clearInterval(iv);
+  }, [loadDeals, authenticated]);
 
   const fund = useCallback(
     async (borrower: Borrower): Promise<{ ok: boolean; error?: string }> => {
@@ -308,7 +476,48 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
     [token],
   );
 
-  const deployedAed = facilities.filter((f) => !f.repaid).reduce((s, f) => s + f.amountAed, 0);
+  // ---- working-capital deal actions ----
+
+  const dealAction = useCallback<FinancierState["dealAction"]>(
+    async (input) => {
+      const t = await token();
+      if (!t) return;
+      // Funding is a REAL on-chain USDC transfer the financier signs to the
+      // borrower's wallet, then we record the state transition with that tx.
+      if (input.action === "fund") {
+        const deal = [...deals, ...requests].find((d) => d.id === input.dealId);
+        const borrower = borrowersRef.current.find((b) => b.id === deal?.borrowerId);
+        if (!deal) throw new Error("Deal not found.");
+        if (!isFullAddress(borrower?.wallet)) {
+          throw new Error("Borrower has no settlement wallet address yet.");
+        }
+        const { provider, from } = await signer();
+        const res = await payOpen(provider, from, borrower!.wallet as Hex, dealUsdc(deal.terms.amountAed));
+        input = { ...input, txHash: res.txHash, explorerUrl: res.explorerUrl, financierWallet: from };
+      }
+      const updated = await apiDealAction(t, input);
+      // Engaging an open request moves it from the inbox onto the desk.
+      setRequests((prev) => prev.filter((d) => d.id !== updated.id));
+      setDeals((prev) =>
+        prev.some((d) => d.id === updated.id)
+          ? prev.map((d) => (d.id === updated.id ? updated : d))
+          : [updated, ...prev],
+      );
+    },
+    [token, signer, deals, requests],
+  );
+
+  const offerToBorrower = useCallback<FinancierState["offerToBorrower"]>(
+    async (input) => {
+      const t = await token();
+      if (!t) return;
+      const deal = await apiOfferToBorrower(t, input);
+      setDeals((prev) => [deal, ...prev.filter((d) => d.id !== deal.id)]);
+    },
+    [token],
+  );
+
+  const deployedAed = deployedFromDeals(deals);
   const availableAed = Math.max(0, FINANCIER.appetiteAed - deployedAed);
 
   return (
@@ -325,6 +534,10 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
         fund,
         markRepaid,
         refresh,
+        deals,
+        requests,
+        dealAction,
+        offerToBorrower,
       }}
     >
       {children}

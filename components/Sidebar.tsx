@@ -4,11 +4,21 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useWorkspace } from "./CorridorProvider";
+import { useOverlays } from "./overlays";
 import { DhowMark } from "./DhowMark";
 
-const NAV = [
+type NavItem = {
+  href?: string;
+  action?: "send";
+  label: string;
+  icon: (p: { className?: string }) => React.ReactElement;
+};
+
+// "Send payment" is a task, not a destination, so it opens the composer modal
+// rather than navigating. Everything else is a place you go and dwell.
+const NAV: NavItem[] = [
   { href: "/overview", label: "Overview", icon: GridIcon },
-  { href: "/send", label: "Send payment", icon: SendIcon },
+  { action: "send", label: "Send payment", icon: SendIcon },
   { href: "/corridor", label: "Cashflow Record", icon: LedgerIcon },
   { href: "/capital", label: "Capital", icon: CoinIcon },
   { href: "/suppliers", label: "Suppliers", icon: UsersIcon },
@@ -18,6 +28,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { business, score, walletAddress, signOut } = useWorkspace();
+  const { openSend } = useOverlays();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -49,20 +60,24 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-0.5 px-3 py-2">
         {NAV.map((item) => {
-          const active = pathname === item.href;
+          const active = !!item.href && pathname === item.href;
           const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 rounded-[var(--radius-sm)] px-3 py-2 text-sm transition-colors ${
-                active
-                  ? "bg-surface font-medium text-ink shadow-sm"
-                  : "text-ink-2 hover:bg-surface-sunk"
-              }`}
-            >
+          const cls = `flex w-full items-center gap-3 rounded-[var(--radius-sm)] px-3 py-2 text-sm transition-colors ${
+            active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-2 hover:bg-surface-sunk"
+          }`;
+          const inner = (
+            <>
               <Icon className={`h-4 w-4 ${active ? "text-teal" : "text-ink-faint"}`} />
               {item.label}
+            </>
+          );
+          return item.action === "send" ? (
+            <button key="send" onClick={() => openSend()} className={cls}>
+              {inner}
+            </button>
+          ) : (
+            <Link key={item.href} href={item.href!} className={cls}>
+              {inner}
             </Link>
           );
         })}
@@ -122,6 +137,7 @@ export function Sidebar() {
 export function MobileBar() {
   const pathname = usePathname();
   const { business } = useWorkspace();
+  const { openSend } = useOverlays();
   const initials = (business?.name ?? "?")
     .split(" ")
     .slice(0, 2)
@@ -142,15 +158,16 @@ export function MobileBar() {
       </div>
       <nav className="flex gap-1 overflow-x-auto border-t border-line px-3 py-2">
         {NAV.map((item) => {
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                active ? "bg-ink text-paper" : "text-ink-2 hover:bg-surface-sunk"
-              }`}
-            >
+          const active = !!item.href && pathname === item.href;
+          const cls = `shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
+            active ? "bg-ink text-paper" : "text-ink-2 hover:bg-surface-sunk"
+          }`;
+          return item.action === "send" ? (
+            <button key="send" onClick={() => openSend()} className={cls}>
+              {item.label}
+            </button>
+          ) : (
+            <Link key={item.href} href={item.href!} className={cls}>
               {item.label}
             </Link>
           );

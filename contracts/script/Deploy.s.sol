@@ -19,7 +19,6 @@ contract Deploy is Script {
         address deployer = vm.addr(pk);
 
         address inspector = vm.envOr("DHOW_INSPECTOR_ADDRESS", deployer);
-        address poster = vm.envOr("DHOW_POSTER_ADDRESS", deployer);
         address easAddr = vm.envOr("DHOW_EAS_ADDRESS", address(0));
         bytes32 schema = vm.envOr("DHOW_SHIPMENT_SCHEMA", keccak256("dhow.shipment-proof.v1"));
 
@@ -32,10 +31,12 @@ contract Deploy is Script {
             easAddr = address(new MockEAS());
         }
 
-        DhowEscrow escrow = new DhowEscrow(address(usdc), easAddr, schema, inspector);
+        // Registry first (recorder unset), then escrow pointing at it, then wire
+        // the escrow as the registry's recorder so settlements post on-chain.
+        DhowScoreRegistry registry = new DhowScoreRegistry(address(0));
+        DhowEscrow escrow = new DhowEscrow(address(usdc), easAddr, schema, inspector, address(registry));
+        registry.setRecorder(address(escrow));
         usdc.approve(address(escrow), type(uint256).max);
-
-        DhowScoreRegistry registry = new DhowScoreRegistry(poster);
 
         vm.stopBroadcast();
 

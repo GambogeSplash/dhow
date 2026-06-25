@@ -1,14 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "motion/react";
 import { useCorridor } from "@/components/CorridorProvider";
+import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
 import { aed, Corridor, ELIGIBLE_THRESHOLD, usdcLabel } from "@/lib/corridor";
+import { statusLabel, ACTIVE_STATUSES } from "@/lib/deal";
+import { stagger, riseItem } from "@/lib/motion";
 
 export default function OverviewPage() {
-  const { business, corridors, score, offerAed } = useCorridor();
+  const { business, corridors, score, offerAed, activeDeal } = useCorridor();
+  const { openSend } = useOverlays();
 
   const inFlight = corridors.filter((c) => c.status === "locked").length;
+
+  // Capital metric reflects a live deal if there is one, else the indicative offer.
+  const capital = activeDeal
+    ? {
+        value: aed(activeDeal.terms.amountAed),
+        foot: statusLabel(activeDeal, "borrower"),
+        tone: ACTIVE_STATUSES.includes(activeDeal.status) ? ("teal" as const) : ("brass" as const),
+      }
+    : {
+        value: score.eligible ? aed(offerAed) : "Locked",
+        foot: score.eligible ? "request now" : `unlocks at score ${ELIGIBLE_THRESHOLD}`,
+        tone: score.eligible ? ("brass" as const) : ("ink" as const),
+      };
   const recent = [...corridors]
     .sort((a, b) => (b.settledAt ?? b.createdAt) - (a.settledAt ?? a.createdAt))
     .slice(0, 5);
@@ -22,16 +40,21 @@ export default function OverviewPage() {
             {business?.name}
           </h1>
         </div>
-        <Link
-          href="/send"
+        <button
+          onClick={() => openSend()}
           className="rounded-full bg-teal px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-deep"
         >
           Pay a supplier →
-        </Link>
+        </button>
       </div>
 
       {/* metrics */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <motion.div
+        variants={stagger}
+        initial="hidden"
+        animate="show"
+        className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
         <Metric
           label="Credit Score"
           value={`${score.score}`}
@@ -44,22 +67,13 @@ export default function OverviewPage() {
           value={aed(score.trailingValueAed)}
           foot={`${score.settledCount} settlement${score.settledCount === 1 ? "" : "s"}`}
         />
-        <Metric
-          label="Working capital"
-          value={score.eligible ? aed(offerAed) : "Locked"}
-          foot={
-            score.eligible
-              ? "available now"
-              : `unlocks at score ${ELIGIBLE_THRESHOLD}`
-          }
-          tone={score.eligible ? "brass" : "ink"}
-        />
+        <Metric label="Working capital" value={capital.value} foot={capital.foot} tone={capital.tone} href="/capital" />
         <Metric
           label="In-flight"
           value={`${inFlight}`}
           foot={inFlight ? "awaiting proof" : "nothing pending"}
         />
-      </div>
+      </motion.div>
 
       {/* recent activity */}
       <div className="mt-8">
@@ -77,12 +91,12 @@ export default function OverviewPage() {
               Pay a supplier in stablecoin and the record starts writing itself.
               Each settlement lifts your Credit Score.
             </p>
-            <Link
-              href="/send"
+            <button
+              onClick={() => openSend()}
               className="mt-5 inline-block rounded-full bg-teal px-5 py-2.5 text-sm font-medium text-white"
             >
               Pay a supplier →
-            </Link>
+            </button>
           </div>
         ) : (
           <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
@@ -102,24 +116,38 @@ function Metric({
   suffix,
   foot,
   tone = "ink",
+  href,
 }: {
   label: string;
   value: string;
   suffix?: string;
   foot?: React.ReactNode;
   tone?: "ink" | "teal" | "brass";
+  href?: string;
 }) {
   const valueColor =
     tone === "teal" ? "text-teal-deep" : tone === "brass" ? "text-brass-deep" : "text-ink";
-  return (
-    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
+  const body = (
+    <>
       <p className="text-xs uppercase tracking-wide text-ink-faint">{label}</p>
       <p className={`font-display tnum mt-2 text-3xl leading-none tracking-tight ${valueColor}`}>
         {value}
         {suffix && <span className="text-lg text-ink-faint">{suffix}</span>}
       </p>
       {foot && <p className="mt-2 text-sm text-ink-3">{foot}</p>}
-    </div>
+    </>
+  );
+  const cls = "block rounded-[var(--radius-card)] border border-line bg-surface p-5";
+  return (
+    <motion.div variants={riseItem}>
+      {href ? (
+        <Link href={href} className={`${cls} transition-colors hover:border-line-strong`}>
+          {body}
+        </Link>
+      ) : (
+        <div className={cls}>{body}</div>
+      )}
+    </motion.div>
   );
 }
 

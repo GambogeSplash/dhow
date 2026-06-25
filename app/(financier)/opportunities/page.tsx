@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useFinancier } from "@/components/FinancierProvider";
+import { useFinancierOverlays } from "@/components/financier-overlays";
 import { Avatar } from "@/components/Avatar";
 import { TierPill } from "@/components/score-viz";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
@@ -9,6 +9,7 @@ import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
 
 export default function OpportunitiesPage() {
   const { borrowers, facilities } = useFinancier();
+  const { openDeal } = useFinancierOverlays();
   // Surface highest score first; a borrower rises into view as it crosses 70.
   const sorted = [...borrowers].sort((a, b) => b.score.score - a.score.score);
   const eligibleCount = sorted.filter((b) => b.score.eligible).length;
@@ -87,12 +88,12 @@ export default function OpportunitiesPage() {
               </div>
 
               {eligible ? (
-                <Link
-                  href={`/deal/${b.id}`}
+                <button
+                  onClick={() => openDeal(b.id)}
                   className="rounded-full bg-brass px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brass-deep"
                 >
                   Review deal →
-                </Link>
+                </button>
               ) : (
                 <span className="rounded-full bg-surface-sunk px-4 py-2 text-sm text-ink-faint">
                   needs +{gap} to qualify

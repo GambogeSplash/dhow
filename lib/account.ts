@@ -16,6 +16,7 @@ import type {
   ProofStatus,
   TxState,
 } from "./corridor";
+import type { Deal, DealTerms } from "./deal";
 
 export interface Business {
   id: string; // Privy user DID
@@ -186,4 +187,59 @@ export async function apiCreateFacility(
 
 export async function apiMarkRepaid(token: string, borrowerId: string): Promise<void> {
   await call(token, "/api/facilities", { method: "PATCH", body: { borrowerId } });
+}
+
+// ---- deals (the working-capital negotiation, both sides) ----
+
+/** The borrower's own deals, newest first. */
+export async function apiBorrowerDeals(token: string): Promise<Deal[]> {
+  const { deals } = await call<{ deals: Deal[] }>(token, "/api/deals?role=borrower");
+  return deals;
+}
+
+/** The financier's engaged deals plus open requests on the desk. */
+export async function apiFinancierDeals(token: string): Promise<{ deals: Deal[]; requests: Deal[] }> {
+  return call<{ deals: Deal[]; requests: Deal[] }>(token, "/api/deals?role=financier");
+}
+
+export async function apiGetDeal(token: string, id: string): Promise<Deal | null> {
+  const { deal } = await call<{ deal: Deal | null }>(token, `/api/deals?id=${encodeURIComponent(id)}`);
+  return deal;
+}
+
+/** Borrower opens a working-capital request. */
+export async function apiRequestDeal(
+  token: string,
+  input: { terms: DealTerms; purpose?: string },
+): Promise<Deal> {
+  const { deal } = await call<{ deal: Deal }>(token, "/api/deals", {
+    method: "POST",
+    body: { action: "request", ...input },
+  });
+  return deal;
+}
+
+export type DealActionInput =
+  | { action: "offer" | "counter"; dealId: string; terms: DealTerms; note?: string }
+  | { action: "accept" | "withdraw"; dealId: string }
+  | { action: "decline"; dealId: string; note?: string }
+  | { action: "fund"; dealId: string; txHash?: string; explorerUrl?: string; financierWallet?: string }
+  | { action: "repay"; dealId: string; txHash?: string; explorerUrl?: string };
+
+/** Apply any negotiation move; returns the updated deal. */
+export async function apiDealAction(token: string, input: DealActionInput): Promise<Deal> {
+  const { deal } = await call<{ deal: Deal }>(token, "/api/deals", { method: "POST", body: input });
+  return deal;
+}
+
+/** Financier opens a deal proactively (offer to a borrower with no prior request). */
+export async function apiOfferToBorrower(
+  token: string,
+  input: { borrowerId: string; borrowerName: string; terms: DealTerms; note?: string },
+): Promise<Deal> {
+  const { deal } = await call<{ deal: Deal }>(token, "/api/deals", {
+    method: "POST",
+    body: { action: "offer", ...input },
+  });
+  return deal;
 }

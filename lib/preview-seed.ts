@@ -13,6 +13,7 @@ import {
   makeCorridorUsdc,
 } from "./corridor";
 import type { Business, Supplier } from "./account";
+import { type Deal, dueAt } from "./deal";
 
 export const SEED_NOW = 1_781_913_600_000; // fixed reference instant (~mid 2026)
 const DAY = 86_400_000;
@@ -258,3 +259,97 @@ export const seedFacility = {
   explorerUrl: `${EXPLORER}${fakeHash("facility-zarah")}`,
   repaid: false,
 };
+
+// ---- seed deals (the working-capital negotiation, both sides) ----
+// Deterministic event ids/timestamps so preview renders identically on server
+// and client (no hydration drift). The same al-Noor deal appears to the importer
+// (their offer to act on) and to the financier (an offer they've sent).
+
+/** Al Noor's live deal: Creek Capital has offered; the borrower's move. */
+export const seedImporterDeal: Deal = {
+  id: "deal_alnoor",
+  borrowerId: "al-noor-trading",
+  borrowerName: "Al Noor Trading",
+  financierId: "fin_creek",
+  financierName: "Creek Capital",
+  status: "offered",
+  turn: "borrower",
+  terms: { amountAed: 36_000, ratePct: 1.5, tenorDays: 30 },
+  purpose: "Bridge the Gulf Steel shipment while Jebel Ali clears.",
+  createdAt: SEED_NOW - 2 * DAY,
+  updatedAt: SEED_NOW - 1 * DAY,
+  events: [
+    {
+      id: "ev_alnoor_req",
+      actor: "borrower",
+      kind: "requested",
+      terms: { amountAed: 40_000, ratePct: 1.5, tenorDays: 30 },
+      note: "Bridge the Gulf Steel shipment while Jebel Ali clears.",
+      createdAt: SEED_NOW - 2 * DAY,
+    },
+    {
+      id: "ev_alnoor_off",
+      actor: "financier",
+      kind: "offered",
+      terms: { amountAed: 36_000, ratePct: 1.5, tenorDays: 30 },
+      note: "Sized to your average corridor. Happy to revisit on a clean release.",
+      createdAt: SEED_NOW - 1 * DAY,
+    },
+  ],
+};
+
+/** A fresh request on the desk, no financier engaged yet. */
+const seedRequestCrescent: Deal = {
+  id: "deal_crescent",
+  borrowerId: "crescent-foods",
+  borrowerName: "Crescent Foods",
+  financierId: null,
+  financierName: null,
+  status: "requested",
+  turn: "financier",
+  terms: { amountAed: 12_000, ratePct: 1.5, tenorDays: 30 },
+  purpose: "Cover the canning-line spares while the season ramps.",
+  createdAt: SEED_NOW - 6 * 3_600_000,
+  updatedAt: SEED_NOW - 6 * 3_600_000,
+  events: [
+    {
+      id: "ev_crescent_req",
+      actor: "borrower",
+      kind: "requested",
+      terms: { amountAed: 12_000, ratePct: 1.5, tenorDays: 30 },
+      note: "Cover the canning-line spares while the season ramps.",
+      createdAt: SEED_NOW - 6 * 3_600_000,
+    },
+  ],
+};
+
+/** A funded, live facility — populates the financier portfolio. */
+const seedFundedZarah: Deal = {
+  id: "deal_zarah",
+  borrowerId: "zarah-imports",
+  borrowerName: "Zarah Imports",
+  financierId: "fin_creek",
+  financierName: "Creek Capital",
+  status: "funded",
+  turn: "borrower",
+  terms: { amountAed: 24_000, ratePct: 1.5, tenorDays: 30 },
+  purpose: "Bridge linen shipment.",
+  fundedAt: SEED_NOW - 6 * DAY,
+  txHash: fakeHash("facility-zarah"),
+  explorerUrl: `${EXPLORER}${fakeHash("facility-zarah")}`,
+  dueAt: dueAt(SEED_NOW - 6 * DAY, 30),
+  createdAt: SEED_NOW - 8 * DAY,
+  updatedAt: SEED_NOW - 6 * DAY,
+  events: [
+    { id: "ev_zarah_req", actor: "borrower", kind: "requested", terms: { amountAed: 24_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 8 * DAY },
+    { id: "ev_zarah_off", actor: "financier", kind: "offered", terms: { amountAed: 24_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 7 * DAY },
+    { id: "ev_zarah_agr", actor: "borrower", kind: "agreed", terms: { amountAed: 24_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 6 * DAY - 3_600_000 },
+    { id: "ev_zarah_fund", actor: "financier", kind: "funded", terms: { amountAed: 24_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 6 * DAY },
+  ],
+};
+
+/** All deals the financier preview surfaces (engaged + the open request). */
+export const seedFinancierDeals: Deal[] = [seedImporterDeal, seedFundedZarah, seedRequestCrescent];
+
+/** The importer (Al Noor) preview's own deals. */
+export const seedImporterDeals: Deal[] = [seedImporterDeal];

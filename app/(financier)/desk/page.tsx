@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useFinancier } from "@/components/FinancierProvider";
+import { useFinancierOverlays } from "@/components/financier-overlays";
 import { Avatar } from "@/components/Avatar";
 import { TierPill } from "@/components/score-viz";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
@@ -9,6 +10,7 @@ import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
 
 export default function DeskPage() {
   const { financier, borrowers, facilities, deployedAed, availableAed } = useFinancier();
+  const { openDeal } = useFinancierOverlays();
   // Highest score first, so the strongest deal sits at the top of the desk.
   const eligible = borrowers
     .filter((b) => b.score.eligible)
@@ -57,10 +59,10 @@ export default function DeskPage() {
           {eligible.map((b) => {
             const funded = fundedIds.has(b.id);
             return (
-              <Link
+              <button
                 key={b.id}
-                href={`/deal/${b.id}`}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors hover:border-line-strong"
+                onClick={() => openDeal(b.id)}
+                className="flex w-full flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-4 text-left transition-colors hover:border-line-strong"
               >
                 <div className="flex min-w-48 items-center gap-3">
                   <Avatar name={b.name} size={40} />
@@ -102,7 +104,7 @@ export default function DeskPage() {
                 </div>
 
                 <span className="text-sm font-medium text-brass-deep">Review deal →</span>
-              </Link>
+              </button>
             );
           })}
         </div>

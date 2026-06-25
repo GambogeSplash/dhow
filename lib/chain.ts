@@ -73,18 +73,14 @@ export function getChainConfig(): ChainConfig | null {
   };
 }
 
+/*
+ * The registry is written ONLY by the escrow (recordSettlement, called atomically
+ * on settlement). The app never posts scores — there is no privileged off-chain
+ * poster. It only READS: scoreOf/isEligible are computed live on-chain from the
+ * raw settlement facts (statsOf), so a financier underwrites numbers that update
+ * with the money, with no server in the trust path.
+ */
 const REGISTRY_ABI = [
-  {
-    type: "function",
-    name: "postScore",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "business", type: "address" },
-      { name: "score", type: "uint16" },
-      { name: "attestationUid", type: "bytes32" },
-    ],
-    outputs: [],
-  },
   {
     type: "function",
     name: "scoreOf",
@@ -98,6 +94,25 @@ const REGISTRY_ABI = [
     stateMutability: "view",
     inputs: [{ name: "business", type: "address" }],
     outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "statsOf",
+    stateMutability: "view",
+    inputs: [{ name: "business", type: "address" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "settledCount", type: "uint64" },
+          { name: "refundedCount", type: "uint64" },
+          { name: "settledVolume", type: "uint128" },
+          { name: "firstSettledAt", type: "uint64" },
+          { name: "lastSettledAt", type: "uint64" },
+          { name: "lastAttestation", type: "bytes32" },
+        ],
+      },
+    ],
   },
 ] as const;
 
@@ -123,37 +138,45 @@ export function publicClient(cfg: ChainConfig) {
   return clients(cfg).pub;
 }
 
-/** Post a freshly computed Credit Score for a business to the on-chain registry. */
-export async function postScoreOnChain(
-  cfg: ChainConfig,
-  business: Hex,
-  score: number,
-  attestationUid: Hex,
-): Promise<Hex | null> {
-  if (!cfg.registry) return null;
-  const { wallet, pub } = clients(cfg);
-  const hash = await wallet.writeContract({
-    address: cfg.registry,
-    abi: REGISTRY_ABI,
-    functionName: "postScore",
-    args: [business, score, attestationUid],
-  });
-  await pub.waitForTransactionReceipt({ hash });
-  return hash;
+export interface OnChainScore {
+  score: number;
+  eligible: boolean;
+  stats: {
+    settledCount: number;
+    refundedCount: number;
+    settledVolume: string; // USDC 6dp, as string to preserve precision
+    firstSettledAt: number;
+    lastSettledAt: number;
+    lastAttestation: Hex;
+  };
 }
 
-/** Read a business's on-chain score + eligibility from the registry. */
+/** Read a business's live on-chain score, eligibility and raw settlement facts.
+ *  The number is computed on-chain from the facts at read time — Dhow's server
+ *  is not in the trust path, so this stays correct even if the backend is down. */
 export async function readScoreOnChain(
   cfg: ChainConfig,
   business: Hex,
-): Promise<{ score: number; eligible: boolean } | null> {
+): Promise<OnChainScore | null> {
   if (!cfg.registry) return null;
   const pub = publicClient(cfg);
-  const [score, eligible] = await Promise.all([
+  const [score, eligible, stats] = await Promise.all([
     pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "scoreOf", args: [business] }),
     pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "isEligible", args: [business] }),
+    pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "statsOf", args: [business] }),
   ]);
-  return { score: Number(score), eligible: Boolean(eligible) };
+  return {
+    score: Number(score),
+    eligible: Boolean(eligible),
+    stats: {
+      settledCount: Number(stats.settledCount),
+      refundedCount: Number(stats.refundedCount),
+      settledVolume: stats.settledVolume.toString(),
+      firstSettledAt: Number(stats.firstSettledAt),
+      lastSettledAt: Number(stats.lastSettledAt),
+      lastAttestation: stats.lastAttestation,
+    },
+  };
 }
 
 const MINT_ABI = [

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount } from "@/components/CorridorProvider";
 import { Sidebar, MobileBar } from "@/components/Sidebar";
+import { OverlayProvider } from "@/components/overlays";
 
 /** Gates the product behind a real, onboarded account and frames it with nav. */
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,14 +26,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex flex-1">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <MobileBar />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 md:px-10 md:py-10">
-          {children}
-        </main>
+    <OverlayProvider>
+      <div className="flex flex-1">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MobileBar />
+          <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 md:px-10 md:py-10">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </OverlayProvider>
   );
 }
