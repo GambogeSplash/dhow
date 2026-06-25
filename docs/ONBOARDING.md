@@ -1,9 +1,6 @@
 # Team onboarding
 
-For the three of us starting work on Dhow. Read this first, then your lane below.
-Running the kickoff call? Use [`onboarding-call-script.md`](onboarding-call-script.md)
-(a recitable script plus a live product walkthrough); this doc is the written
-reference the team reads afterward.
+For anyone starting work on Dhow. Read this first, then your lane below.
 Background reading order: [`README.md`](../README.md) (what + why) →
 [`docs/EXPLAINER.md`](EXPLAINER.md) (plain-language) →
 [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) (how it fits) → this doc (who does what).

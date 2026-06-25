@@ -14,11 +14,15 @@ and design). Read [`ONBOARDING.md`](ONBOARDING.md) for who owns what and
 
 ## Where we are (honest snapshot)
 
-- Working two-sided product (importer + financier), real Privy onboarding, the full flywheel.
-- Contracts written and tested: `DhowEscrow`, `DhowScoreRegistry`, `MockUSDC`, EAS-compatible attestation. 15 passing Foundry tests. Deployed to Amoy.
+- Working two-sided marketplace (importer + financier), real Privy onboarding, the full flywheel.
+- **Working-capital deal lifecycle** is real: a borrower requests, financiers compete with offers, the borrower compares and accepts one (declining the rivals), the financier funds, and the borrower repays. One shared `deal` object both sides act on (`lib/deal.ts` state machine, `/api/deals`, `deals` + `deal_events` tables).
+- **On-chain credit is fact-driven:** the escrow records every settlement to `DhowScoreRegistry` atomically (`recordSettlement`), and the score is computed live on-chain from those facts. No privileged off-chain poster; the score stays correct even if the backend is down. **23 passing Foundry tests.**
 - User-signed settlement on Amoy (open pay / Proof-Lock / release / refund) from the Privy embedded wallet. Financier funds with a real signed USDC transfer.
+- Proper workflows, not one-click stubs: confirmation flows for attest-and-release, dispute-and-refund, and accept-offer; auto-repay prompt on the next settlement.
+- Product surface: modal/drawer IA (send, add supplier, deal review), motion.dev spring physics, company brand marks + real Polygon/USDC imagery, a production landing page with two real doors (importer / financier).
+- Hardening: input length/charset validation (client + server), faucet rate-limit, send-time USDC balance pre-flight.
 - Scoring engine is pure and shared client/server. Vitest suite green.
-- `NEXT_PUBLIC_PREVIEW_MODE` lets anyone walk the UI locally with seeded, interactive data (no Privy/DB/chain). Demo and onboarding only, never production.
+- `NEXT_PUBLIC_PREVIEW_MODE` serves seeded, interactive sample data locally (no Privy/DB/chain) for walkthroughs. The production path is real Privy + Neon + Amoy. **Next UX step: serve that sample data to a freshly signed-in empty account, and clear it the moment the user starts their own workspace.**
 
 The gaps below are the work, not embarrassments. The Maturity table in
 [`README.md`](../README.md) is the canonical honest read; this plan is how we close it.
@@ -28,11 +32,12 @@ The gaps below are the work, not embarrassments. The Maturity table in
 ## Milestone 0 — Live on Amoy, end to end, in front of a judge
 
 **Goal:** a fresh user signs in with Privy, onboards, sends a Proof-Lock, the
-inspector attests, the user releases, the score posts on-chain, a financier funds
-them, and every step shows a real Polygonscan link. This is the single most
-important next move: a live transaction in front of judges beats any deck.
+inspector attests, the user releases, **the escrow records the settlement to the
+score registry in the same transaction**, a financier funds them, and every step
+shows a real Polygonscan link. This is the single most important next move: a
+live transaction in front of judges beats any deck.
 
-**Target: within 1 week (by ~2026-06-29).**
+**Target: deploy live to the public on Vercel (Privy + Neon + Amoy).**
 
 ### Contracts
 - [ ] Fund the deployer burner with test POL on Amoy (faucet.polygon.technology or alchemy.com/faucets/polygon-amoy). Burner address and key are in the gitignored `.env.amoy.local`.
