@@ -1,10 +1,10 @@
 import type { CSSProperties } from "react";
+import { getCompanyMark } from "./company-marks";
 
 /*
- * Monogram avatar for businesses, suppliers, and borrowers. These are real
- * trade counterparties without public logos, so we render a deterministic
- * initial-mark in the maritime palette (the Mercury/Ramp pattern) rather than
- * inventing fake brand logos.
+ * Avatar for businesses, suppliers, and borrowers. Known demo counterparties get
+ * a bespoke brand mark (see company-marks); anything else falls back to a
+ * deterministic monogram in the maritime palette (the Mercury/Ramp pattern).
  */
 
 const PALETTE: Array<{ bg: string; fg: string }> = [
@@ -37,7 +37,8 @@ export function Avatar({
   size?: number;
   className?: string;
 }) {
-  const c = PALETTE[hash(name) % PALETTE.length];
+  const mark = getCompanyMark(name);
+  const c = mark ?? PALETTE[hash(name) % PALETTE.length];
   const style: CSSProperties = {
     width: size,
     height: size,
@@ -48,10 +49,16 @@ export function Avatar({
   return (
     <span
       aria-hidden
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-display font-medium tracking-tight tnum ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-display font-medium tracking-tight tnum ${className}`}
       style={style}
     >
-      {initials(name)}
+      {mark ? (
+        <svg viewBox="0 0 24 24" width={Math.round(size * 0.62)} height={Math.round(size * 0.62)} aria-hidden>
+          {mark.node}
+        </svg>
+      ) : (
+        initials(name)
+      )}
     </span>
   );
 }

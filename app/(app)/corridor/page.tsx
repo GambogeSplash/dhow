@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useCorridor } from "@/components/CorridorProvider";
+import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import {
@@ -14,8 +15,8 @@ import {
 } from "@/lib/corridor";
 
 export default function CorridorPage() {
-  const { corridors, score, prevScore, attest, refund, retry, offerAed } =
-    useCorridor();
+  const { corridors, score, prevScore, retry, offerAed } = useCorridor();
+  const { openAttest, openRefund } = useOverlays();
   const crossedNow = prevScore < ELIGIBLE_THRESHOLD && score.eligible;
 
   // Pulse the factor(s) whose points just rose, so the score lift is legible.
@@ -121,8 +122,8 @@ export default function CorridorPage() {
               <LedgerRow
                 key={c.id}
                 c={c}
-                onAttest={() => attest(c.id)}
-                onRefund={() => refund(c.id)}
+                onAttest={() => openAttest(c.id)}
+                onRefund={() => openRefund(c.id)}
                 onRetry={() => retry(c.id)}
               />
             ))}

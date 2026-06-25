@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { SendPaymentForm } from "@/components/SendPaymentForm";
 import { AddSupplierForm } from "@/components/AddSupplierForm";
+import { AttestProofForm } from "@/components/AttestProofForm";
+import { RefundDisputeForm } from "@/components/RefundDisputeForm";
 
 /*
  * Importer overlay manager. Focused tasks (compose a payment, add a supplier)
@@ -15,6 +17,8 @@ import { AddSupplierForm } from "@/components/AddSupplierForm";
 interface Overlays {
   openSend: (supplierId?: string) => void;
   openAddSupplier: () => void;
+  openAttest: (corridorId: string) => void;
+  openRefund: (corridorId: string) => void;
   close: () => void;
 }
 
@@ -23,16 +27,22 @@ const Ctx = createContext<Overlays | null>(null);
 export function OverlayProvider({ children }: { children: React.ReactNode }) {
   const [send, setSend] = useState<{ open: boolean; supplierId?: string }>({ open: false });
   const [addSupplier, setAddSupplier] = useState(false);
+  const [attestId, setAttestId] = useState<string | null>(null);
+  const [refundId, setRefundId] = useState<string | null>(null);
 
   const openSend = useCallback((supplierId?: string) => setSend({ open: true, supplierId }), []);
   const openAddSupplier = useCallback(() => setAddSupplier(true), []);
+  const openAttest = useCallback((corridorId: string) => setAttestId(corridorId), []);
+  const openRefund = useCallback((corridorId: string) => setRefundId(corridorId), []);
   const close = useCallback(() => {
     setSend({ open: false });
     setAddSupplier(false);
+    setAttestId(null);
+    setRefundId(null);
   }, []);
 
   return (
-    <Ctx.Provider value={{ openSend, openAddSupplier, close }}>
+    <Ctx.Provider value={{ openSend, openAddSupplier, openAttest, openRefund, close }}>
       {children}
 
       <Modal open={send.open} onClose={() => setSend({ open: false })} title="Pay a supplier" maxWidth="max-w-2xl">
@@ -43,6 +53,14 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
 
       <Modal open={addSupplier} onClose={() => setAddSupplier(false)} title="Add supplier">
         {addSupplier && <AddSupplierForm onDone={() => setAddSupplier(false)} />}
+      </Modal>
+
+      <Modal open={!!attestId} onClose={() => setAttestId(null)} title="Release against shipment proof">
+        {attestId && <AttestProofForm corridorId={attestId} onClose={() => setAttestId(null)} />}
+      </Modal>
+
+      <Modal open={!!refundId} onClose={() => setRefundId(null)} title="Dispute & refund">
+        {refundId && <RefundDisputeForm corridorId={refundId} onClose={() => setRefundId(null)} />}
       </Modal>
     </Ctx.Provider>
   );
