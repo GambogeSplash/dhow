@@ -135,6 +135,11 @@ interface WorkspaceState {
   // "repaid from your next settlement" is a real action, not just copy.
   repayPrompt: { dealId: string; financierName: string; amountAed: number; corridorRef: string } | null;
   dismissRepayPrompt: () => void;
+
+  // A freshly onboarded, empty account shows a labelled sample workspace (so the
+  // dashboard is not dead) until the user takes their first real action.
+  isSample: boolean;
+  startReal: () => void;
 }
 
 /** If a funded deal is outstanding, the settlement that just landed can clear it. */
@@ -373,6 +378,8 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
     refund,
     retry,
     acceptOffer: () => setOfferAccepted(true),
+    isSample: false,
+    startReal: () => {},
     deals,
     activeDeal: pickActiveDeal(deals),
     maxAdvanceAed: requestHeadroom(score),
@@ -397,6 +404,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   const [prevScore, setPrevScore] = useState(0);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [repayPrompt, setRepayPrompt] = useState<WorkspaceState["repayPrompt"]>(null);
+  const [sampleDismissed, setSampleDismissed] = useState(false);
 
   const corridorsRef = useRef<Corridor[]>(corridors);
   corridorsRef.current = corridors;
@@ -456,7 +464,37 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     // re-run when the wallet address materialises so it gets recorded
   }, [ready, authenticated, user?.id, wallets.length, applyRecord, user]);
 
-  const score = useMemo(() => scoreCorridors(corridors, now), [corridors, now]);
+  // Sample workspace: a fresh, onboarded, empty account sees seeded activity
+  // (suppliers + settled corridors + the resulting score) until it takes its
+  // first real action. Dismissal persists per user so it never comes back.
+  const accountEmpty = isOnboarded && corridors.length === 0 && suppliers.length === 0;
+  const sampleMode = accountEmpty && !sampleDismissed;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      if (localStorage.getItem(`dhow.sample.dismissed.${user.id}`) === "1") setSampleDismissed(true);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [user?.id]);
+
+  const startReal = useCallback(() => {
+    setSampleDismissed(true);
+    try {
+      if (user?.id) localStorage.setItem(`dhow.sample.dismissed.${user.id}`, "1");
+    } catch {
+      /* storage unavailable */
+    }
+  }, [user?.id]);
+
+  // Only the read-only views (settlement history + the score it produces) get the
+  // sample overlay. Suppliers and deals stay real and empty, so the Send and
+  // Request forms always operate on the user's own data, never sample rows.
+  const viewCorridors = sampleMode ? seedCorridors : corridors;
+  const realScore = useMemo(() => scoreCorridors(corridors, now), [corridors, now]);
+  // Score the sample against its own reference instant so cadence reads fresh.
+  const score = sampleMode ? scoreCorridors(seedCorridors, SEED_NOW) : realScore;
   const offerAed = useMemo(() => advanceOffer(score), [score]);
 
   const patch = useCallback((id: string, fields: Partial<Corridor>) => {
@@ -819,7 +857,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     saveBusiness,
     addSupplier,
     signOut,
-    corridors,
+    corridors: viewCorridors,
     score,
     prevScore,
     offerAed,
@@ -829,6 +867,8 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     refund,
     retry,
     acceptOffer,
+    isSample: sampleMode,
+    startReal,
     deals,
     activeDeal: pickActiveDeal(deals),
     maxAdvanceAed: requestHeadroom(score),

@@ -6,6 +6,7 @@ import { useAccount } from "@/components/CorridorProvider";
 import { Sidebar, MobileBar } from "@/components/Sidebar";
 import { OverlayProvider } from "@/components/overlays";
 import { RepayBanner } from "@/components/RepayBanner";
+import { SampleBanner } from "@/components/SampleBanner";
 
 /** Gates the product behind a real, onboarded account and frames it with nav. */
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <MobileBar />
+          <SampleBanner />
           <RepayBanner />
           <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 md:px-10 md:py-10">
             {children}
