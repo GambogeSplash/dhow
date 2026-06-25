@@ -2,23 +2,39 @@
 
 import Link from "next/link";
 import { useFinancier } from "@/components/FinancierProvider";
+import { Avatar } from "@/components/Avatar";
+import { TierPill } from "@/components/score-viz";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
 
 export default function DeskPage() {
   const { financier, borrowers, facilities, deployedAed, availableAed } = useFinancier();
-  const eligible = borrowers.filter((b) => b.score.eligible);
+  // Highest score first, so the strongest deal sits at the top of the desk.
+  const eligible = borrowers
+    .filter((b) => b.score.eligible)
+    .sort((a, b) => b.score.score - a.score.score);
+  const fundedIds = new Set(facilities.filter((f) => !f.repaid).map((f) => f.borrowerId));
   const active = facilities.filter((f) => !f.repaid);
 
   return (
     <div>
       <p className="text-sm text-ink-3">Desk</p>
       <h1 className="font-display mt-1 text-3xl tracking-tight">{financier.name}</h1>
-      <p className="mt-2 max-w-xl text-ink-2">{financier.blurb}</p>
+      <p className="mt-2 max-w-xl text-ink-2">
+        {financier.blurb} The desk shows the borrowers whose on-chain Credit Score clears{" "}
+        {ELIGIBLE_THRESHOLD}, ranked by score. Every figure is a settlement Dhow verified on-chain.
+      </p>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+      <div className="mt-6 grid gap-4 sm:grid-cols-4">
         <Metric label="Appetite" value={aed(financier.appetiteAed)} tone="ink" />
         <Metric label="Deployed" value={aed(deployedAed)} sub={`${active.length} active`} tone="brass" />
         <Metric label="Available" value={aed(availableAed)} tone="ink" />
+        <Metric
+          label="Eligible"
+          value={`${eligible.length}`}
+          sub={eligible.length === 1 ? "borrower" : "borrowers"}
+          tone="ink"
+        />
       </div>
 
       <div className="mt-8 flex items-center justify-between">
@@ -38,24 +54,57 @@ export default function DeskPage() {
         </div>
       ) : (
         <div className="mt-3 space-y-3">
-          {eligible.map((b) => (
-            <Link
-              key={b.id}
-              href={`/deal/${b.id}`}
-              className="flex items-center justify-between rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors hover:border-line-strong"
-            >
-              <div>
-                <p className="font-medium">{b.name}</p>
-                <p className="text-sm text-ink-3">
-                  {b.city}, {b.country}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-display tnum text-xl text-teal-deep">{b.score.score}/100</p>
-                <p className="text-xs text-ink-faint">{aed(b.offerAed)} offer</p>
-              </div>
-            </Link>
-          ))}
+          {eligible.map((b) => {
+            const funded = fundedIds.has(b.id);
+            return (
+              <Link
+                key={b.id}
+                href={`/deal/${b.id}`}
+                className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors hover:border-line-strong"
+              >
+                <div className="flex min-w-48 items-center gap-3">
+                  <Avatar name={b.name} size={40} />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{b.name}</p>
+                      {funded && (
+                        <span className="rounded-full bg-brass-tint px-2 py-0.5 text-[11px] font-medium text-brass-deep">
+                          Funded
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-ink-3">
+                      {b.city}, {b.country}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <TierPill tier={b.score.tier} />
+                  <div className="flex items-baseline gap-1">
+                    <AnimatedNumber
+                      value={b.score.score}
+                      from={b.score.score}
+                      className="font-display tnum text-2xl tracking-tight text-teal-deep"
+                    />
+                    <span className="text-sm text-ink-faint">/100</span>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <p className="tnum text-sm">{aed(b.score.trailingValueAed)}</p>
+                  <p className="text-xs text-ink-faint">verified volume</p>
+                </div>
+
+                <div className="text-right">
+                  <p className="font-display tnum text-xl text-brass-deep">{aed(b.offerAed)}</p>
+                  <p className="text-xs text-ink-faint">advance offer</p>
+                </div>
+
+                <span className="text-sm font-medium text-brass-deep">Review deal →</span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

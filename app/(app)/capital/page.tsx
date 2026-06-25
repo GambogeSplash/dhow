@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCorridor } from "@/components/CorridorProvider";
+import { Avatar } from "@/components/Avatar";
 import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
 
 export default function CapitalPage() {
@@ -104,11 +105,14 @@ export default function CapitalPage() {
 
         <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-surface p-6">
           <div className="flex items-center justify-between border-b border-line pb-4">
-            <div>
-              <p className="font-medium">{business?.name}</p>
-              <p className="text-sm text-ink-3">
-                {business?.city}, {business?.country}
-              </p>
+            <div className="flex items-center gap-3">
+              <Avatar name={business?.name ?? "Business"} size={38} />
+              <div>
+                <p className="font-medium">{business?.name}</p>
+                <p className="text-sm text-ink-3">
+                  {business?.city}, {business?.country}
+                </p>
+              </div>
             </div>
             <div className="text-right">
               <p className="tnum font-display text-2xl text-teal-deep">

@@ -14,6 +14,8 @@ import type { Business } from "@/lib/account";
 import { apiListFacilities, apiCreateFacility, apiMarkRepaid } from "@/lib/account";
 import { FINANCIER } from "@/lib/financier";
 import { CHAIN_ID, payOpen } from "@/lib/chain-client";
+import { PREVIEW_MODE } from "@/lib/preview";
+import { SEED_NOW, seedBorrowers, seedFacility, previewTx } from "@/lib/preview-seed";
 
 /*
  * The financier (Creek Capital) side. Borrowers come from the shared database
@@ -94,6 +96,72 @@ function newFacilityId(): string {
 const Ctx = createContext<FinancierState | null>(null);
 
 export function FinancierProvider({ children }: { children: React.ReactNode }) {
+  return PREVIEW_MODE ? (
+    <FinancierPreview>{children}</FinancierPreview>
+  ) : (
+    <FinancierLive>{children}</FinancierLive>
+  );
+}
+
+/** Seeded, INTERACTIVE financier state for local preview (no Privy, no
+ *  database). Funding and repayment mutate local state so the buttons work;
+ *  nothing is signed or persisted. */
+function FinancierPreview({ children }: { children: React.ReactNode }) {
+  const borrowers = seedBorrowers.map((r) =>
+    toBorrower(r.business, r.corridors, SEED_NOW, scoreCorridors(r.corridors, SEED_NOW).score),
+  );
+  const [facilities, setFacilities] = useState<Facility[]>([seedFacility]);
+
+  const fund = useCallback(
+    async (borrower: Borrower): Promise<{ ok: boolean; error?: string }> => {
+      if (borrower.offerAed <= 0) return { ok: false, error: "No eligible offer." };
+      const tx = previewTx();
+      setFacilities((prev) => [
+        ...prev.filter((f) => f.borrowerId !== borrower.id),
+        {
+          borrowerId: borrower.id,
+          borrowerName: borrower.name,
+          amountAed: borrower.offerAed,
+          fundedAt: SEED_NOW,
+          txHash: tx.txHash,
+          explorerUrl: tx.explorerUrl,
+          repaid: false,
+        },
+      ]);
+      return { ok: true };
+    },
+    [],
+  );
+
+  const markRepaid = useCallback((borrowerId: string) => {
+    setFacilities((prev) =>
+      prev.map((f) => (f.borrowerId === borrowerId ? { ...f, repaid: true } : f)),
+    );
+  }, []);
+
+  const deployedAed = facilities.filter((f) => !f.repaid).reduce((s, f) => s + f.amountAed, 0);
+  return (
+    <Ctx.Provider
+      value={{
+        financier: FINANCIER,
+        borrowers,
+        facilities,
+        deployedAed,
+        availableAed: Math.max(0, FINANCIER.appetiteAed - deployedAed),
+        isAuthenticated: true,
+        walletAddress: "0xf15a9c1e000000000000000000000000000000ca",
+        login: () => {},
+        fund,
+        markRepaid,
+        refresh: () => {},
+      }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
+}
+
+function FinancierLive({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);

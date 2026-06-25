@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCorridor } from "@/components/CorridorProvider";
+import { Avatar } from "@/components/Avatar";
 import { aed, Corridor, ELIGIBLE_THRESHOLD, usdcLabel } from "@/lib/corridor";
 
 export default function OverviewPage() {
@@ -129,12 +130,15 @@ function ActivityRow({ c, first }: { c: Corridor; first: boolean }) {
         first ? "" : "border-t border-line"
       }`}
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="tnum font-mono text-xs text-ink-faint">{c.ref}</span>
-          <StatusPill c={c} />
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar name={c.supplier.name} size={34} />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="tnum font-mono text-xs text-ink-faint">{c.ref}</span>
+            <StatusPill c={c} />
+          </div>
+          <p className="mt-0.5 truncate text-sm font-medium">{c.supplier.name}</p>
         </div>
-        <p className="mt-0.5 truncate text-sm font-medium">{c.supplier.name}</p>
       </div>
       <div className="shrink-0 text-right">
         <p className="tnum font-medium">{aed(c.amountAed)}</p>

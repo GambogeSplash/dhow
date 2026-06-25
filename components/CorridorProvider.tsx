@@ -39,6 +39,8 @@ import {
   refundCorridor,
 } from "@/lib/chain-client";
 import { FINANCIER } from "@/lib/financier";
+import { PREVIEW_MODE } from "@/lib/preview";
+import { SEED_NOW, seedBusiness, seedSuppliers, seedCorridors, previewTx } from "@/lib/preview-seed";
 
 const PROOF_LABEL = "Bill of lading · Jebel Ali inbound";
 const INSPECTOR = "Gulf Inspectorate";
@@ -132,6 +134,143 @@ function newSupplierId(): string {
 }
 
 export function CorridorProvider({ children }: { children: React.ReactNode }) {
+  return PREVIEW_MODE ? (
+    <CorridorPreview>{children}</CorridorPreview>
+  ) : (
+    <CorridorLive>{children}</CorridorLive>
+  );
+}
+
+/** Seeded, INTERACTIVE workspace for local preview (no Privy, no database). All
+ *  actions mutate local state so every button works for a walkthrough; nothing
+ *  is signed or persisted. Surfaces render fully populated and never redirect. */
+function CorridorPreview({ children }: { children: React.ReactNode }) {
+  const [suppliers, setSuppliers] = useState<Supplier[]>(seedSuppliers);
+  const [corridors, setCorridors] = useState<Corridor[]>(seedCorridors);
+  const [offerAccepted, setOfferAccepted] = useState(false);
+  const [prevScore, setPrevScore] = useState(() =>
+    Math.max(0, scoreCorridors(seedCorridors, SEED_NOW).score - 8),
+  );
+  const corridorsRef = useRef(corridors);
+  corridorsRef.current = corridors;
+  const score = scoreCorridors(corridors, SEED_NOW);
+
+  const newId = (p: string) =>
+    `${p}_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10)}`;
+
+  const addSupplier: WorkspaceState["addSupplier"] = (s) => {
+    const sup: Supplier = { id: newId("sup"), ...s };
+    setSuppliers((prev) => [...prev, sup]);
+    return sup;
+  };
+
+  const sendPayment: WorkspaceState["sendPayment"] = (input) => {
+    const supplier = suppliers.find((s) => s.id === input.supplierId);
+    if (!supplier) return null;
+    const settledNow = input.mode === "open";
+    const seq = 420 + corridors.filter((c) => c.ref.startsWith("DHW-")).length;
+    const tx = previewTx();
+    const corridor: Corridor = {
+      id: newId("dhw"),
+      ref: `DHW-0${seq}`,
+      supplier,
+      goods: input.goods,
+      amountAed: input.amountAed,
+      amountUsdc: makeCorridorUsdc(input.amountAed),
+      mode: input.mode,
+      status: settledNow ? "settled" : "locked",
+      proof:
+        input.mode === "prooflock" ? { status: "awaiting", label: PROOF_LABEL } : undefined,
+      createdAt: SEED_NOW,
+      settledAt: settledNow ? SEED_NOW : undefined,
+      txHash: tx.txHash,
+      explorerUrl: tx.explorerUrl,
+      txState: "confirmed",
+    };
+    setPrevScore(score.score);
+    setCorridors((prev) => [corridor, ...prev]);
+    return corridor;
+  };
+
+  const attest: WorkspaceState["attest"] = (id) => {
+    setPrevScore(scoreCorridors(corridorsRef.current, SEED_NOW).score);
+    setCorridors((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              status: "settled",
+              settledAt: SEED_NOW,
+              txState: "confirmed",
+              proof: c.proof
+                ? { ...c.proof, status: "attested", attestedBy: INSPECTOR }
+                : c.proof,
+            }
+          : c,
+      ),
+    );
+  };
+
+  const refund: WorkspaceState["refund"] = (id) => {
+    setPrevScore(scoreCorridors(corridorsRef.current, SEED_NOW).score);
+    setCorridors((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              status: "refunded",
+              proof: c.proof ? { ...c.proof, status: "failed" } : c.proof,
+            }
+          : c,
+      ),
+    );
+  };
+
+  const retry: WorkspaceState["retry"] = (id) => {
+    const tx = previewTx();
+    setCorridors((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              txState: "confirmed",
+              status: c.mode === "open" ? "settled" : c.status,
+              settledAt: c.mode === "open" ? SEED_NOW : c.settledAt,
+              txHash: tx.txHash,
+              explorerUrl: tx.explorerUrl,
+            }
+          : c,
+      ),
+    );
+  };
+
+  const value: WorkspaceState = {
+    hydrated: true,
+    business: seedBusiness,
+    suppliers,
+    financier: FINANCIER,
+    isAuthenticated: true,
+    isOnboarded: true,
+    walletAddress: seedBusiness.walletAddress,
+    login: () => {},
+    saveBusiness: () => {},
+    addSupplier,
+    signOut: () => {},
+    corridors,
+    score,
+    prevScore,
+    offerAed: advanceOffer(score),
+    offerAccepted,
+    sendPayment,
+    attest,
+    refund,
+    retry,
+    acceptOffer: () => setOfferAccepted(true),
+  };
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+function CorridorLive({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const [now] = useState(() => Date.now());

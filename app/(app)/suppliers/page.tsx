@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useCorridor } from "@/components/CorridorProvider";
+import { Avatar } from "@/components/Avatar";
 import { aed } from "@/lib/corridor";
 
 export default function SuppliersPage() {
@@ -110,9 +111,7 @@ export default function SuppliersPage() {
                 className="flex items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-4"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sunk text-xs font-semibold text-ink-3">
-                    {s.name.slice(0, 2).toUpperCase()}
-                  </span>
+                  <Avatar name={s.name} size={36} />
                   <div>
                     <p className="font-medium">{s.name}</p>
                     <p className="text-sm text-ink-3">
