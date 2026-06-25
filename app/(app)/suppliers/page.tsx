@@ -21,7 +21,6 @@ export default function SuppliersPage() {
     <div className="mx-auto max-w-3xl">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm text-ink-3">Suppliers</p>
           <h1 className="font-display mt-1 text-3xl tracking-tight">Your suppliers</h1>
           <p className="mt-2 max-w-lg text-ink-2">
             The counterparties you pay. Add them once, then settle in a couple of clicks.

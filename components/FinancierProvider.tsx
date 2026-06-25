@@ -78,9 +78,15 @@ interface FinancierState {
   isAuthenticated: boolean;
   walletAddress?: string;
   login: () => void;
+  logout: () => void;
   fund: (borrower: Borrower) => Promise<{ ok: boolean; error?: string }>;
   markRepaid: (borrowerId: string) => void;
   refresh: () => void;
+
+  // A financier with an empty desk (no borrowers, deals or requests yet) sees a
+  // labelled sample desk so the console is not dead until real importers arrive.
+  isSample: boolean;
+  startReal: () => void;
 
   // working-capital deals (the negotiation, financier side)
   deals: Deal[]; // deals this financier is engaged on
@@ -253,9 +259,12 @@ function FinancierPreview({ children }: { children: React.ReactNode }) {
         isAuthenticated: true,
         walletAddress: PREVIEW_WALLET,
         login: () => {},
+        logout: () => {},
         fund,
         markRepaid,
         refresh: () => {},
+        isSample: false,
+        startReal: () => {},
         deals,
         requests,
         dealAction,
@@ -300,12 +309,13 @@ function openOfferLocal(args: {
 }
 
 function FinancierLive({ children }: { children: React.ReactNode }) {
-  const { ready, authenticated, login } = usePrivy();
+  const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [requests, setRequests] = useState<Deal[]>([]);
+  const [sampleDismissed, setSampleDismissed] = useState(false);
 
   const walletsRef = useRef(wallets);
   walletsRef.current = wallets;
@@ -517,25 +527,62 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
     [token],
   );
 
-  const deployedAed = deployedFromDeals(deals);
+  // Sample desk: a financier whose console is empty (no real borrowers, deals or
+  // requests yet) sees seeded borrowers and a live negotiation, until a real one
+  // arrives or they dismiss it. Only the read views are seeded; funding still
+  // signs from their real wallet.
+  const accountEmpty =
+    isAuthenticated && borrowers.length === 0 && deals.length === 0 && requests.length === 0;
+  const sampleMode = accountEmpty && !sampleDismissed;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      if (localStorage.getItem(`dhow.fin.sample.dismissed.${user.id}`) === "1") setSampleDismissed(true);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [user?.id]);
+
+  const startReal = useCallback(() => {
+    setSampleDismissed(true);
+    try {
+      if (user?.id) localStorage.setItem(`dhow.fin.sample.dismissed.${user.id}`, "1");
+    } catch {
+      /* storage unavailable */
+    }
+  }, [user?.id]);
+
+  const viewBorrowers = sampleMode
+    ? seedBorrowers.map((r) =>
+        toBorrower(r.business, r.corridors, SEED_NOW, scoreCorridors(r.corridors, SEED_NOW).score),
+      )
+    : borrowers;
+  const viewDeals = sampleMode ? seedFinancierDeals.filter((d) => d.financierId) : deals;
+  const viewRequests = sampleMode ? seedFinancierDeals.filter((d) => !d.financierId) : requests;
+
+  const deployedAed = deployedFromDeals(viewDeals);
   const availableAed = Math.max(0, FINANCIER.appetiteAed - deployedAed);
 
   return (
     <Ctx.Provider
       value={{
         financier: FINANCIER,
-        borrowers,
+        borrowers: viewBorrowers,
         facilities,
         deployedAed,
         availableAed,
         isAuthenticated,
         walletAddress: embedded?.address,
         login,
+        logout,
         fund,
         markRepaid,
         refresh,
-        deals,
-        requests,
+        isSample: sampleMode,
+        startReal,
+        deals: viewDeals,
+        requests: viewRequests,
         dealAction,
         offerToBorrower,
       }}

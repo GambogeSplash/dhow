@@ -20,7 +20,6 @@ export default function DeskPage() {
 
   return (
     <div>
-      <p className="text-sm text-ink-3">Desk</p>
       <h1 className="font-display mt-1 text-3xl tracking-tight">{financier.name}</h1>
       <p className="mt-2 max-w-xl text-ink-2">
         {financier.blurb} The desk shows the borrowers whose on-chain Credit Score clears{" "}

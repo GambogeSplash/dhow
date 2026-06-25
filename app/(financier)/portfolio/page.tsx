@@ -35,7 +35,6 @@ export default function PortfolioPage() {
 
   return (
     <div>
-      <p className="text-sm text-ink-3">Portfolio</p>
       <h1 className="font-display mt-1 text-3xl tracking-tight">Facilities</h1>
       <p className="mt-2 max-w-xl text-ink-2">
         Capital deployed against verified settlements. The facility stays safe while the borrower keeps

@@ -15,16 +15,14 @@ import {
   totalRepayableAed,
   daysUntil,
   statusLabel,
-  DEFAULT_RATE_PCT,
-  DEFAULT_TENOR_DAYS,
   type Deal,
   type DealTerms,
 } from "@/lib/deal";
 import { springPop, springSoft, rise, stagger, riseItem, press } from "@/lib/motion";
 
 export default function CapitalPage() {
-  const { score, business, financier, deals, maxAdvanceAed, requestCapital, dealAction } = useCorridor();
-  const { openAccept } = useOverlays();
+  const { score, business, deals, maxAdvanceAed, dealAction } = useCorridor();
+  const { openAccept, openRequestCapital } = useOverlays();
 
   const now = Date.now();
   const [busy, setBusy] = useState(false);
@@ -61,8 +59,7 @@ export default function CapitalPage() {
   if (deals.length === 0 && !score.eligible) {
     return (
       <div className="mx-auto max-w-xl">
-        <p className="text-sm text-ink-3">Capital</p>
-        <h1 className="font-display mt-1 text-3xl tracking-tight">Working capital</h1>
+        <h1 className="font-display text-3xl tracking-tight">Working capital</h1>
         <motion.div
           variants={rise}
           initial="hidden"
@@ -92,10 +89,7 @@ export default function CapitalPage() {
     <div className="grid gap-8 lg:grid-cols-2">
       {/* borrower side */}
       <section className="space-y-6">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-ink-3">Capital</p>
-        </div>
-        <h1 className="font-display -mt-3 text-3xl tracking-tight">Working capital</h1>
+        <h1 className="font-display text-3xl tracking-tight">Working capital</h1>
 
         {/* active facility */}
         {facility && <FacilityCard deal={facility} now={now} busy={busy} onRepay={() => run(() => dealAction({ action: "repay", dealId: facility.id }))} business={business?.name} />}
@@ -132,16 +126,22 @@ export default function CapitalPage() {
         {/* a single (non-competitive) negotiation, e.g. a proactive offer */}
         {single && <SingleNegotiation deal={single} maxAdvanceAed={maxAdvanceAed} busy={busy} run={run} dealAction={dealAction} onAccept={openAccept} />}
 
-        {/* request form when nothing is in negotiation */}
+        {/* request entry when nothing is in negotiation */}
         {!negotiating && score.eligible && (
-          <RequestForm
-            hasFacility={!!facility}
-            maxAdvanceAed={maxAdvanceAed}
-            avgCorridorAed={score.avgCorridorAed}
-            financierName={financier.name}
-            busy={busy}
-            onRequest={(terms, note) => run(() => requestCapital({ terms, purpose: note }))}
-          />
+          <motion.div variants={rise} initial="hidden" animate="show" className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
+            <p className="font-medium">{facility ? "Need more capital?" : "Raise working capital"}</p>
+            <p className="mt-1 text-sm text-ink-2">
+              Send a request and every financier on Dhow competes to fund it. Your headroom is{" "}
+              <span className="tnum font-medium text-ink">{aed(maxAdvanceAed)}</span>.
+            </p>
+            <motion.button
+              {...press}
+              onClick={openRequestCapital}
+              className="mt-4 rounded-full bg-teal px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-deep"
+            >
+              {facility ? "Request more capital →" : "Request working capital →"}
+            </motion.button>
+          </motion.div>
         )}
 
         {/* history */}
@@ -397,43 +397,6 @@ function SingleNegotiation({
         <p className="mb-4 text-sm font-medium text-ink-2">Negotiation</p>
         <DealThread deal={deal} />
       </div>
-    </motion.div>
-  );
-}
-
-function RequestForm({
-  hasFacility,
-  maxAdvanceAed,
-  avgCorridorAed,
-  financierName,
-  busy,
-  onRequest,
-}: {
-  hasFacility: boolean;
-  maxAdvanceAed: number;
-  avgCorridorAed: number;
-  financierName: string;
-  busy: boolean;
-  onRequest: (terms: DealTerms, note?: string) => void;
-}) {
-  return (
-    <motion.div variants={rise} initial="hidden" animate="show" className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
-      <p className="font-medium">{hasFacility ? "Request more capital" : "Request working capital"}</p>
-      <p className="mt-1 text-sm text-ink-2">
-        Set the amount and term; every financier on Dhow can bid, and you pick the best. Sized to your settled corridors.
-      </p>
-      <div className="mt-4 mb-4 flex items-center justify-between rounded-[var(--radius-card)] bg-teal-tint px-4 py-3">
-        <span className="text-sm text-teal-deep">Your headroom</span>
-        <span className="tnum font-display text-xl text-teal-deep">{aed(maxAdvanceAed)}</span>
-      </div>
-      <TermsEditor
-        initial={{ amountAed: Math.min(maxAdvanceAed, Math.round(avgCorridorAed * 0.3) || 10_000), ratePct: DEFAULT_RATE_PCT, tenorDays: DEFAULT_TENOR_DAYS }}
-        maxAmountAed={maxAdvanceAed}
-        submitLabel="Send request →"
-        busy={busy}
-        noteLabel="What's it for? (optional)"
-        onSubmit={onRequest}
-      />
     </motion.div>
   );
 }
