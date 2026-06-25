@@ -18,7 +18,6 @@ contract DeployCore is Script {
         address usdcAddr = vm.envAddress("DHOW_USDC_ADDRESS");
         address easAddr = vm.envAddress("DHOW_EAS_ADDRESS");
         address inspector = vm.envOr("DHOW_INSPECTOR_ADDRESS", deployer);
-        address poster = vm.envOr("DHOW_POSTER_ADDRESS", deployer);
         bytes32 schema = vm.envOr("DHOW_SHIPMENT_SCHEMA", keccak256("dhow.shipment-proof.v1"));
 
         vm.startBroadcast(pk);
@@ -26,10 +25,10 @@ contract DeployCore is Script {
         // Ensure the deployer holds USDC to lock with (no-op cost if already minted elsewhere).
         MockUSDC usdc = MockUSDC(usdcAddr);
 
-        DhowEscrow escrow = new DhowEscrow(usdcAddr, easAddr, schema, inspector);
+        DhowScoreRegistry registry = new DhowScoreRegistry(address(0));
+        DhowEscrow escrow = new DhowEscrow(usdcAddr, easAddr, schema, inspector, address(registry));
+        registry.setRecorder(address(escrow));
         usdc.approve(address(escrow), type(uint256).max);
-
-        DhowScoreRegistry registry = new DhowScoreRegistry(poster);
 
         vm.stopBroadcast();
 

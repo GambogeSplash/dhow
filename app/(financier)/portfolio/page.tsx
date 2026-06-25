@@ -1,11 +1,37 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "motion/react";
 import { useFinancier } from "@/components/FinancierProvider";
+import { Avatar } from "@/components/Avatar";
+import { DealStatusPill, pct } from "@/components/deal-ui";
+import { stagger, riseItem, rise } from "@/lib/motion";
 import { aed } from "@/lib/corridor";
+import { FINANCIER } from "@/lib/financier";
+import { totalRepayableAed, daysUntil } from "@/lib/deal";
+
+function shortHash(h: string): string {
+  if (h.includes("…")) return h;
+  return h.length > 14 ? `${h.slice(0, 6)}…${h.slice(-4)}` : h;
+}
 
 export default function PortfolioPage() {
-  const { facilities, markRepaid } = useFinancier();
+  const { deals } = useFinancier();
+  const now = Date.now();
+
+  // The book: deals that have been disbursed, live or closed clean.
+  const book = deals.filter((d) => d.status === "funded" || d.status === "repaid");
+  // Funded first, then repaid; within each, most recent first.
+  const rows = [...book].sort(
+    (a, b) =>
+      Number(a.status === "repaid") - Number(b.status === "repaid") ||
+      (b.fundedAt ?? b.updatedAt) - (a.fundedAt ?? a.updatedAt),
+  );
+
+  const funded = book.filter((d) => d.status === "funded");
+  const deployedAed = funded.reduce((s, d) => s + d.terms.amountAed, 0);
+  const availableAed = Math.max(0, FINANCIER.appetiteAed - deployedAed);
+  const repaidCount = book.filter((d) => d.status === "repaid").length;
 
   return (
     <div>
@@ -16,61 +42,119 @@ export default function PortfolioPage() {
         settling on Dhow: the loan is repaid out of the next settlement.
       </p>
 
-      {facilities.length === 0 ? (
-        <div className="mt-6 rounded-[var(--radius-card)] border border-dashed border-line-strong bg-surface p-8 text-center">
+      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <Metric label="Deployed" value={aed(deployedAed)} sub={`${funded.length} active`} tone="brass" />
+        <Metric label="Available" value={aed(availableAed)} tone="ink" />
+        <Metric
+          label="Repaid"
+          value={`${repaidCount}`}
+          sub={repaidCount === 1 ? "facility" : "facilities"}
+          tone="ink"
+        />
+      </div>
+
+      {book.length === 0 ? (
+        <motion.div
+          variants={rise}
+          initial="hidden"
+          animate="show"
+          className="mt-6 rounded-[var(--radius-card)] border border-dashed border-line-strong bg-surface p-8 text-center"
+        >
           <p className="font-medium">No facilities yet</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
-            Fund an eligible borrower from the deal view and it appears here.
+            Agree terms with a borrower and fund the advance, and it appears here.
           </p>
-          <Link href="/opportunities" className="mt-5 inline-block text-sm text-brass-deep underline underline-offset-2">
-            View opportunities →
+          <Link href="/requests" className="mt-5 inline-block text-sm text-brass-deep underline underline-offset-2">
+            View requests →
           </Link>
-        </div>
+        </motion.div>
       ) : (
-        <div className="mt-6 space-y-3">
-          {facilities.map((f) => (
-            <div
-              key={f.borrowerId}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-5"
+        <motion.ul variants={stagger} initial="hidden" animate="show" className="mt-6 space-y-3">
+          {rows.map((d) => (
+            <motion.li
+              key={d.id}
+              variants={riseItem}
+              className="rounded-[var(--radius-card)] border border-line bg-surface p-5"
             >
-              <div>
-                <p className="font-medium">{f.borrowerName}</p>
-                <p className="text-sm text-ink-3">
-                  Funded {new Date(f.fundedAt).toLocaleDateString()}
-                  {f.explorerUrl && (
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-48 items-center gap-3">
+                  <Avatar name={d.borrowerName} size={40} />
+                  <div>
+                    <p className="font-medium">{d.borrowerName}</p>
+                    <p className="text-sm text-ink-3">
+                      {pct(d.terms.ratePct)} fee · {d.terms.tenorDays}d
+                      {d.fundedAt && (
+                        <span className="text-ink-faint">
+                          {" · "}funded {new Date(d.fundedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <p className="font-display tnum text-xl text-brass-deep">{aed(d.terms.amountAed)}</p>
+                  <p className="tnum text-xs text-ink-faint">repay {aed(totalRepayableAed(d.terms))}</p>
+                </div>
+
+                <DealStatusPill deal={d} viewer="financier" />
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 text-sm">
+                <span className="text-ink-3">
+                  {d.status === "repaid" ? (
                     <>
-                      {" · "}
-                      <a
-                        href={f.explorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="tnum font-mono text-teal-deep underline decoration-teal/30 underline-offset-2 hover:decoration-teal"
-                      >
-                        receipt ↗
-                      </a>
+                      <span className="text-ink-faint">Closed clean</span>
+                      {d.repaidAt
+                        ? ` · ${new Date(d.repaidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                        : ""}
                     </>
+                  ) : d.dueAt ? (
+                    <>
+                      <span className="text-ink-faint">Due in </span>
+                      <span className="tnum font-medium text-ink-2">{Math.max(0, daysUntil(d.dueAt, now))} days</span>
+                    </>
+                  ) : (
+                    <span className="text-ink-faint">Funded</span>
                   )}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-display tnum text-xl text-brass-deep">{aed(f.amountAed)}</p>
-              </div>
-              {f.repaid ? (
-                <span className="rounded-full bg-teal-tint px-4 py-2 text-sm font-medium text-teal-deep">
-                  Repaid
                 </span>
-              ) : (
-                <button
-                  onClick={() => markRepaid(f.borrowerId)}
-                  className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink-3 transition-colors hover:border-line-strong hover:text-ink"
-                >
-                  Mark repaid
-                </button>
-              )}
-            </div>
+                {(d.status === "repaid" ? d.repayExplorerUrl && d.repayTxHash : d.explorerUrl && d.txHash) && (
+                  <a
+                    href={(d.status === "repaid" ? d.repayExplorerUrl : d.explorerUrl)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="tnum font-mono text-teal-deep underline decoration-teal/30 underline-offset-2 hover:decoration-teal"
+                  >
+                    {shortHash((d.status === "repaid" ? d.repayTxHash : d.txHash)!)} ↗
+                  </a>
+                )}
+              </div>
+            </motion.li>
           ))}
-        </div>
+        </motion.ul>
       )}
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: "ink" | "brass";
+}) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
+      <p className="text-xs uppercase tracking-wide text-ink-faint">{label}</p>
+      <p className={`font-display tnum mt-2 text-2xl ${tone === "brass" ? "text-brass-deep" : "text-ink"}`}>
+        {value}
+      </p>
+      {sub && <p className="mt-1 text-xs text-ink-3">{sub}</p>}
     </div>
   );
 }

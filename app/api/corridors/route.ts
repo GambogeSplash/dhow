@@ -6,6 +6,7 @@ import { getUserId, privyConfigured } from "@/lib/privy-server";
 import { dbConfigured } from "@/lib/db";
 import { createCorridor, updateCorridor, type CorridorPatch } from "@/lib/store-server";
 import type { SettlementMode, SettlementStatus, TxState } from "@/lib/corridor";
+import { cleanText, GOODS_MAX } from "@/lib/validate";
 
 export const runtime = "nodejs";
 
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     id: body.id,
     ref: body.ref,
     supplierId: body.supplierId,
-    goods: body.goods ?? "",
+    goods: cleanText(body.goods ?? "", GOODS_MAX),
     amountAed: body.amountAed,
     mode: body.mode,
     status: body.status,

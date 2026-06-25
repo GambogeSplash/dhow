@@ -7,20 +7,23 @@ How Dhow fits together, for someone about to work on it. Read [`EXPLAINER.md`](E
 ```
  IMPORTER (app/(app))                          FINANCIER (app/(financier))
  CorridorProvider                              FinancierProvider
-      │  pay / lock / attest / refund                │  reads scored borrowers
-      ▼                                              ▼  funds eligible ones
+      │  pay / lock / release / refund               │  reads scored borrowers
+      │  (USER signs, lib/chain-client)              ▼  funds eligible ones
+      ▼                                                 (FINANCIER signs)
  ┌──────────────── API routes (app/api) ──────────────────┐
- │  /chain    settle: pay | lock | release | refund        │
- │  /attest   create the EAS shipment-proof attestation    │
- │  /score    POST: post score on-chain · GET: read it     │
- │  /fund     financier USDC transfer to the SME           │
- │  /corridors  read corridors from chain events           │
+ │  account · suppliers · corridors   Privy-verified persistence (Neon DB)  │
+ │  attest    create the EAS shipment-proof attestation    │
+ │  score     GET: read the live on-chain score (read-only) │
+ │  borrowers scored borrower feed for the financier       │
+ │  facilities financier funded-facility ledger            │
+ │  faucet    operator sponsors a new user's wallet        │
  └───────────────────────────┬─────────────────────────────┘
                               ▼  server-only viem signer (lib/chain, lib/eas, lib/indexer)
  ┌──────────────────── Polygon (or anvil) ────────────────────┐
  │  DhowEscrow   lock → releaseWithAttestation → refund        │
  │  EAS / attestation contract   shipment proof               │
- │  DhowScoreRegistry   scoreOf / isEligible / postScore       │
+ │  DhowScoreRegistry   recordSettlement(escrow-only) ·        │
+ │                      scoreOf / isEligible (live, on-chain)  │
  │  USDC                                                       │
  └─────────────────────────────────────────────────────────────┘
 ```
@@ -29,40 +32,59 @@ The chain is the shared source of truth. The financier reads the same chain a ju
 
 ## The flywheel, as transactions
 
-1. **Lock** — importer sends a Proof-Lock. `DhowEscrow.lock` pulls USDC into escrow. (`/api/chain` action `lock`.)
-2. **Attest** — the trusted inspector signs an EAS shipment-proof attestation (schema: `corridorId, ref, docType, portOfEntry, inspectedAt, supplier`). Returns a uid. (`/api/attest` → `lib/eas.ts`.)
-3. **Release** — `DhowEscrow.releaseWithAttestation(corridorId, uid)` verifies the attestation (schema, not revoked, not expired, attester is the inspector, corridorId matches to block replay) and releases to the supplier. Permissionless: the attestation is the authorisation. (`/api/chain` action `release`.)
-4. **Score** — the server recomputes the Corridor Score with the pure engine and posts it to `DhowScoreRegistry`. (`/api/score` POST.)
-5. **Surface + fund** — the financier polls `/api/score` and `/api/corridors`, sees the score cross the threshold, and funds the SME with a real USDC transfer. (`/api/fund`.)
+1. **Lock** — the importer signs a Proof-Lock from their own Privy embedded wallet. `DhowEscrow.lock` pulls USDC into escrow. (`lib/chain-client.ts` `lockProoflock`; the corridor persists via `/api/corridors`.)
+2. **Attest** — the trusted inspector signs an EAS shipment-proof attestation (schema: `corridorId, ref, docType, portOfEntry, inspectedAt, supplier`). Returns a uid. (`/api/attest` → `lib/eas.ts`, operator-signed.)
+3. **Release** — `DhowEscrow.releaseWithAttestation(corridorId, uid)` verifies the attestation (schema, not revoked, not expired, attester is the inspector, corridorId matches to block replay) and releases to the supplier. Permissionless: the attestation is the authorisation. (user-signed, `lib/chain-client.ts` `releaseCorridor`.)
+4. **Score** — in the *same release transaction*, the escrow calls `DhowScoreRegistry.recordSettlement`, appending the settlement fact on-chain. The score is recomputed live from those facts on every read. There is no separate score-post step, no privileged poster, and no off-chain server in the trust path — if Dhow's backend is down, the score still moves with the money. (`refund` records the failed-proof fact the same way.)
+5. **Surface + fund** — the financier reads `/api/borrowers` (with the live on-chain score from `/api/score` GET), sees the score cross the threshold, and funds the SME with a real USDC transfer signed from their own wallet; the facility persists via `/api/facilities`.
 
-Every step is a real on-chain transaction when the chain is wired, or a simulated hash when it isn't, so the demo always runs.
+Settlement, release and the score update are one atomic on-chain transaction the user signs; the only operator step (attest) is real when the chain is wired and gates off gracefully when it isn't.
 
 ## Layers
 
 ### Scoring engine — `lib/corridor.ts`
-Pure and chain-agnostic, and the single most important piece of shared logic. `scoreCorridors(corridors, now)` returns the Corridor Score as a transparent function of four factors: history (≤30), volume (≤25), proof performance (≤30), cadence (≤15). `ELIGIBLE_THRESHOLD = 70`. `advanceOffer(score)` sizes the working-capital offer. Imported on the client (optimistic UI) and the server (posting the score on-chain). Do not fork this; both sides must agree.
+Pure and chain-agnostic, and the single most important piece of shared logic. `scoreCorridors(corridors, now)` returns the Corridor Score as a transparent function of four factors: history (≤30), volume (≤25), proof performance (≤30), cadence (≤15). `ELIGIBLE_THRESHOLD = 70`. `advanceOffer(score)` sizes the working-capital offer. Imported on the client for the optimistic UI; the *canonical* score is the one computed on-chain by `DhowScoreRegistry._score`, which mirrors this same four-factor formula. Keep the two in lockstep — both sides must agree.
 
 ### Contracts — `contracts/src`
 - **`DhowEscrow.sol`** — the Proof-Lock. `lock` / `releaseWithAttestation` / `releaseByInspector` (owner-gated fallback when `requireEas` is off) / `refund` (after deadline). Events `Locked` / `Released(…, bytes32 attestationUid)` / `Refunded`. `corridorId = keccak256(ref)` is the universal key.
-- **`DhowScoreRegistry.sol`** — `postScore(business, score, attestationUid)` (poster-only), `scoreOf`, `isEligible`. The on-chain reputation surface.
+- **`DhowScoreRegistry.sol`** — the on-chain reputation surface, computed from facts. `recordSettlement(business, amount, success, uid)` is callable **only by the escrow** (the `recorder`), appending raw settlement facts (`statsOf`); `scoreOf` / `isEligible` / `isPreferred` compute the live score from those facts at read time (recency decays with real elapsed time). No off-chain poster, no privileged write — the score is as censorship-proof and live as the settlement itself.
 - **`interfaces/IEAS.sol`** — minimal vendored EAS interface (the `Attestation` struct + `getAttestation`) so the escrow verifies attestations without a heavy dependency. `test/mocks/MockEAS.sol` is an EAS-compatible attestation registry used locally and on testnet until canonical EAS is wired.
 
-### Chain spine — server-only
-- **`lib/chain.ts`** — the viem signer and config (`getChainConfig` env-gate), the `pay | lock | release | refund` action router, plus `postScoreOnChain` / `readScoreOnChain` / `transferUsdc`.
+### Client signing — `lib/chain-client.ts`
+The user signs their own settlement (`payOpen` / `lockProoflock` / `releaseCorridor` / `refundCorridor`) from their Privy embedded wallet over its EIP-1193 provider. Addresses come from `NEXT_PUBLIC_*` env; `chainConfigured()` gates it. Dhow never signs a user's payment.
+
+### Operator chain spine — server-only
+- **`lib/chain.ts`** — the viem signer and config (`getChainConfig` env-gate) for operator-only actions: `readScoreOnChain` (read-only — the score is written on-chain by the escrow, never by the server), the faucet (`fundTestWallet`), and `transferUsdc`.
 - **`lib/eas.ts`** — the inspector signs a shipment-proof attestation and returns its uid for release.
 - **`lib/indexer.ts`** — reads escrow events (`Locked`/`Released`/`Refunded`) so the financier can derive a borrower's corridors from chain state cross-machine, with a short in-memory cache.
 
+### Persistence — server-only
+- **`lib/db.ts`** + **`db/schema.sql`** — Neon serverless Postgres (businesses / suppliers / corridors / facilities).
+- **`lib/store-server.ts`** — server-authoritative CRUD, every function scoped by `businessId` (the verified Privy DID), so a caller only ever touches their own rows.
+- **`lib/privy-server.ts`** — verifies the Privy access token (`getUserId`); every mutating route gates on it.
+
 ### Stores — client
-- **`CorridorProvider`** (`useCorridor`/`useAccount`/`useWorkspace`) — importer state, localStorage-persisted, optimistic-then-reconcile. `attest()` runs the full attest → release → post-score chain.
-- **`FinancierProvider`** (`useFinancier`) — derives borrowers from the importer's persisted workspace (same-origin localStorage, so a two-window demo is live), overlays the on-chain score from `/api/score`, and funds via `/api/fund`.
+- **`CorridorProvider`** (`useCorridor`/`useAccount`/`useWorkspace`) — importer state: Privy auth + DB persistence (via `app/api/*`) + user-signed writes, optimistic-then-reconcile. `attest()` runs the full attest → release → post-score chain.
+- **`FinancierProvider`** (`useFinancier`) — borrowers from `/api/borrowers` (real, cross-machine), overlays the on-chain score from `/api/score`, and funds via a real signed USDC transfer recorded in `/api/facilities`.
 
 ### Shared UI — `components/score-viz.tsx`
 `ScoreCard` / `FactorRow` / `TierPill`, so both personas read the same number in one visual language. Design tokens live in `app/globals.css`.
 
-## Demo mode
+## Config gating
 
-Set `NEXT_PUBLIC_DEMO_MODE=1` to: auto-attest a locked Proof-Lock after a short beat (no manual click on stage), speed the score count-up, tighten the financier poll to 1s, and cascade the factor bars. The factor that moved pulses and the meter celebrates when the score crosses the threshold.
+There is no demo/sim mode. The app reads its capabilities from env and degrades
+gracefully when a layer is unconfigured: `privyConfigured()` (auth),
+`dbConfigured()` (persistence), `chainConfigured()` / `getChainConfig()`
+(client and operator chain). With no config the surfaces still render but the
+live paths are off; a real run needs Privy + a Neon DB + the deployed Amoy
+addresses (see [`SETUP.md`](SETUP.md)).
 
 ## What's deliberately deferred
 
-Multi-financier bidding, real KYC/AML, fee-accrual beyond a single repayment, Privy production auth, a database (state is localStorage on the importer, chain-derived on the financier), and canonical EAS on mainnet. These are scoped out of the demo on purpose; the thesis is proven by the live flywheel, not by breadth.
+Multi-financier bidding, real KYC/AML, fee-accrual beyond a single repayment,
+canonical EAS on mainnet (Amoy uses an EAS-compatible attestation contract), a
+decentralised shipment-proof oracle (the inspector attestation and score post
+are still operator-signed), and mainnet itself (gated on an audit + real USDC
+liquidity). These are scoped out on purpose; the thesis is proven by the live
+flywheel, not by breadth. The honest stage-by-stage read is the Maturity table
+in [`README.md`](../README.md).

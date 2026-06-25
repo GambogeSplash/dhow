@@ -3,6 +3,7 @@ import { db } from "./db";
 import type { Business, Supplier, AccountRecord } from "./account";
 import type { Corridor, SettlementMode, SettlementStatus, ProofStatus, TxState } from "./corridor";
 import { makeCorridorUsdc } from "./corridor";
+import type { Deal, DealEvent } from "./deal";
 
 /*
  * Server-authoritative data access. All functions are scoped by businessId
@@ -275,6 +276,209 @@ export async function markFacilityRepaid(financierId: string, borrowerId: string
   await sql`
     UPDATE facilities SET repaid = TRUE
     WHERE financier_id = ${financierId} AND borrower_id = ${borrowerId}
+  `;
+}
+
+// ---- deals (the working-capital negotiation lifecycle) ----
+
+type DealRow = {
+  id: string;
+  borrower_id: string;
+  borrower_name: string;
+  financier_id: string | null;
+  financier_name: string | null;
+  status: string;
+  turn: string;
+  amount_aed: number;
+  rate_pct: number;
+  tenor_days: number;
+  purpose: string | null;
+  request_id: string | null;
+  financier_wallet: string | null;
+  funded_at: string | number | null;
+  tx_hash: string | null;
+  explorer_url: string | null;
+  due_at: string | number | null;
+  repaid_at: string | number | null;
+  repay_tx_hash: string | null;
+  repay_explorer_url: string | null;
+  created_at: string | number;
+  updated_at: string | number;
+};
+
+type DealEventRow = {
+  id: string;
+  actor: string;
+  kind: string;
+  amount_aed: number | null;
+  rate_pct: number | null;
+  tenor_days: number | null;
+  note: string | null;
+  created_at: string | number;
+};
+
+function toDealEvent(r: DealEventRow): DealEvent {
+  const hasTerms = r.amount_aed != null && r.rate_pct != null && r.tenor_days != null;
+  return {
+    id: r.id,
+    actor: r.actor as DealEvent["actor"],
+    kind: r.kind as DealEvent["kind"],
+    terms: hasTerms
+      ? { amountAed: num(r.amount_aed), ratePct: num(r.rate_pct), tenorDays: Number(r.tenor_days) }
+      : undefined,
+    note: r.note ?? undefined,
+    createdAt: num(r.created_at),
+  };
+}
+
+function toDeal(r: DealRow, events: DealEvent[]): Deal {
+  return {
+    id: r.id,
+    borrowerId: r.borrower_id,
+    borrowerName: r.borrower_name,
+    financierId: r.financier_id,
+    financierName: r.financier_name,
+    status: r.status as Deal["status"],
+    turn: r.turn as Deal["turn"],
+    terms: { amountAed: num(r.amount_aed), ratePct: num(r.rate_pct), tenorDays: Number(r.tenor_days) },
+    purpose: r.purpose ?? undefined,
+    requestId: r.request_id ?? undefined,
+    financierWallet: r.financier_wallet ?? undefined,
+    fundedAt: r.funded_at == null ? undefined : num(r.funded_at),
+    txHash: r.tx_hash ?? undefined,
+    explorerUrl: r.explorer_url ?? undefined,
+    dueAt: r.due_at == null ? undefined : num(r.due_at),
+    repaidAt: r.repaid_at == null ? undefined : num(r.repaid_at),
+    repayTxHash: r.repay_tx_hash ?? undefined,
+    repayExplorerUrl: r.repay_explorer_url ?? undefined,
+    createdAt: num(r.created_at),
+    updatedAt: num(r.updated_at),
+    events,
+  };
+}
+
+async function loadEvents(dealId: string): Promise<DealEvent[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM deal_events WHERE deal_id = ${dealId} ORDER BY created_at ASC
+  `) as DealEventRow[];
+  return rows.map(toDealEvent);
+}
+
+async function hydrate(rows: DealRow[]): Promise<Deal[]> {
+  const out: Deal[] = [];
+  for (const r of rows) out.push(toDeal(r, await loadEvents(r.id)));
+  return out;
+}
+
+export async function getDeal(id: string): Promise<Deal | null> {
+  const sql = db();
+  const rows = (await sql`SELECT * FROM deals WHERE id = ${id}`) as DealRow[];
+  if (!rows.length) return null;
+  return toDeal(rows[0], await loadEvents(id));
+}
+
+/** Every deal this borrower owns, newest first. */
+export async function listDealsForBorrower(borrowerId: string): Promise<Deal[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM deals WHERE borrower_id = ${borrowerId} ORDER BY updated_at DESC
+  `) as DealRow[];
+  return hydrate(rows);
+}
+
+/** Deals a financier is engaged on (they've offered / funded), newest first. */
+export async function listDealsForFinancier(financierId: string): Promise<Deal[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM deals WHERE financier_id = ${financierId} ORDER BY updated_at DESC
+  `) as DealRow[];
+  return hydrate(rows);
+}
+
+/** Open requests on the desk that no financier has claimed yet. */
+export async function listOpenRequests(): Promise<Deal[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM deals WHERE financier_id IS NULL AND status = 'requested' ORDER BY created_at ASC
+  `) as DealRow[];
+  return hydrate(rows);
+}
+
+/** Insert a brand-new deal (request) and its opening event. */
+export async function insertDeal(d: Deal): Promise<void> {
+  const sql = db();
+  await sql`
+    INSERT INTO deals (
+      id, borrower_id, borrower_name, financier_id, financier_name, status, turn,
+      amount_aed, rate_pct, tenor_days, purpose, request_id, created_at, updated_at
+    ) VALUES (
+      ${d.id}, ${d.borrowerId}, ${d.borrowerName}, ${d.financierId}, ${d.financierName}, ${d.status}, ${d.turn},
+      ${d.terms.amountAed}, ${d.terms.ratePct}, ${d.terms.tenorDays}, ${d.purpose ?? null}, ${d.requestId ?? null}, ${d.createdAt}, ${d.updatedAt}
+    )
+  `;
+  for (const e of d.events) await insertDealEvent(d.id, e);
+}
+
+/** Competing offers a borrower has received against one request. */
+export async function listSiblingOffers(requestId: string): Promise<Deal[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM deals WHERE request_id = ${requestId} ORDER BY created_at ASC
+  `) as DealRow[];
+  return hydrate(rows);
+}
+
+/** When one offer is accepted, close the parent request and the losing bids. */
+export async function closeRequestAndSiblings(requestId: string, winningDealId: string, now: number): Promise<void> {
+  const sql = db();
+  await sql`
+    UPDATE deals SET status = 'withdrawn', updated_at = ${now}
+    WHERE id = ${requestId} AND status = 'requested'
+  `;
+  await sql`
+    UPDATE deals SET status = 'declined', updated_at = ${now}
+    WHERE request_id = ${requestId} AND id <> ${winningDealId}
+      AND status IN ('offered', 'countered')
+  `;
+}
+
+/** Persist the mutable deal fields after an action, and append the new event. */
+export async function saveDealStep(d: Deal, newEvent: DealEvent): Promise<void> {
+  const sql = db();
+  await sql`
+    UPDATE deals SET
+      financier_id = ${d.financierId},
+      financier_name = ${d.financierName},
+      status = ${d.status},
+      turn = ${d.turn},
+      amount_aed = ${d.terms.amountAed},
+      rate_pct = ${d.terms.ratePct},
+      tenor_days = ${d.terms.tenorDays},
+      financier_wallet = ${d.financierWallet ?? null},
+      funded_at = ${d.fundedAt ?? null},
+      tx_hash = ${d.txHash ?? null},
+      explorer_url = ${d.explorerUrl ?? null},
+      due_at = ${d.dueAt ?? null},
+      repaid_at = ${d.repaidAt ?? null},
+      repay_tx_hash = ${d.repayTxHash ?? null},
+      repay_explorer_url = ${d.repayExplorerUrl ?? null},
+      updated_at = ${d.updatedAt}
+    WHERE id = ${d.id}
+  `;
+  await insertDealEvent(d.id, newEvent);
+}
+
+async function insertDealEvent(dealId: string, e: DealEvent): Promise<void> {
+  const sql = db();
+  await sql`
+    INSERT INTO deal_events (id, deal_id, actor, kind, amount_aed, rate_pct, tenor_days, note, created_at)
+    VALUES (
+      ${e.id}, ${dealId}, ${e.actor}, ${e.kind},
+      ${e.terms?.amountAed ?? null}, ${e.terms?.ratePct ?? null}, ${e.terms?.tenorDays ?? null},
+      ${e.note ?? null}, ${e.createdAt}
+    )
+    ON CONFLICT (id) DO NOTHING
   `;
 }
 

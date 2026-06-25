@@ -68,7 +68,7 @@ signs the USDC transfer / escrow lock on Amoy.
 | Release against attestation | **the user** | client |
 | Refund | **the user** | client |
 | Shipment-proof EAS attestation | inspector (operator) | server (`lib/eas.ts`) |
-| Post Credit Score to registry | registry owner (operator) | server (`/api/score`) |
+| Record the settlement to the score registry | **the escrow contract**, atomically on release/refund | on-chain (no operator, no `/api/score` write) |
 
 ## Funding test wallets
 

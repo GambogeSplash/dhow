@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserId, privyConfigured } from "@/lib/privy-server";
 import { dbConfigured } from "@/lib/db";
 import { addSupplier } from "@/lib/store-server";
+import { sanitizeSupplier, isValidName } from "@/lib/validate";
 
 export const runtime = "nodejs";
 
@@ -19,15 +20,20 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "bad json" }, { status: 400 });
   }
-  if (!body.name?.trim()) return NextResponse.json({ error: "missing name" }, { status: 400 });
+  const clean = sanitizeSupplier({
+    name: body.name ?? "",
+    city: body.city ?? "",
+    country: body.country ?? "",
+  });
+  if (!isValidName(clean.name)) return NextResponse.json({ error: "missing name" }, { status: 400 });
 
   const supplier = await addSupplier(
     userId,
     {
       id: body.id,
-      name: body.name.trim(),
-      city: body.city?.trim() ?? "",
-      country: body.country?.trim() ?? "",
+      name: clean.name,
+      city: clean.city,
+      country: clean.country,
       walletAddress: body.walletAddress?.trim() || undefined,
     },
     body.now ?? Date.now(),
