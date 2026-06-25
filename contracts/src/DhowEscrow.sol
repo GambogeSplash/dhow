@@ -79,6 +79,10 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     event InspectorChanged(address indexed inspector);
     event RequireEasChanged(bool requireEas);
 
+    
+    /*/////////////////////////////////////////////////////////
+                            CONSTRUCTOR
+    /////////////////////////////////////////////////////////*/
     constructor(address token_, address eas_, bytes32 shipmentSchema_, address inspector_) Ownable(msg.sender) {
         if (token_ == address(0)) revert DhowEscrow__InvalidSupplier();
         if (inspector_ == address(0)) revert DhowEscrow__InvalidInspector();
@@ -90,6 +94,9 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         requireEas = true;
     }
 
+    /*//////////////////////////////////////////////////////////////
+                        EXTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
     function setInspector(address inspector_) external onlyOwner {
         if (inspector_ == address(0)) revert DhowEscrow__InvalidInspector();
 
