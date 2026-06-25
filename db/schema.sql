@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS deals (
   rate_pct           DOUBLE PRECISION NOT NULL,    -- live terms: flat financing fee %
   tenor_days         INTEGER NOT NULL,             -- live terms: repayment window
   purpose            TEXT,
+  request_id         TEXT,                          -- parent request, on a competing offer
   financier_wallet   TEXT,                          -- funding address (repayment target)
   funded_at          BIGINT,
   tx_hash            TEXT,

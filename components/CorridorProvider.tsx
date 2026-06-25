@@ -129,6 +129,24 @@ interface WorkspaceState {
   maxAdvanceAed: number;
   requestCapital: (input: { terms: DealTerms; purpose?: string }) => Promise<void>;
   dealAction: (input: DealActionInput) => Promise<void>;
+
+  // a funded facility can be cleared from a fresh settlement: when the borrower
+  // settles while a deal is funded, this prompt offers a one-tap repayment, so
+  // "repaid from your next settlement" is a real action, not just copy.
+  repayPrompt: { dealId: string; financierName: string; amountAed: number; corridorRef: string } | null;
+  dismissRepayPrompt: () => void;
+}
+
+/** If a funded deal is outstanding, the settlement that just landed can clear it. */
+function fundedRepayPrompt(deals: Deal[], corridorRef: string) {
+  const funded = deals.find((d) => d.status === "funded");
+  if (!funded) return null;
+  return {
+    dealId: funded.id,
+    financierName: funded.financierName ?? "your financier",
+    amountAed: totalRepayableAed(funded.terms),
+    corridorRef,
+  };
 }
 
 const Ctx = createContext<WorkspaceState | null>(null);
@@ -180,6 +198,9 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
   const [corridors, setCorridors] = useState<Corridor[]>(seedCorridors);
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [deals, setDeals] = useState<Deal[]>(seedImporterDeals);
+  const [repayPrompt, setRepayPrompt] = useState<WorkspaceState["repayPrompt"]>(null);
+  const dealsRef = useRef(deals);
+  dealsRef.current = deals;
   const [prevScore, setPrevScore] = useState(() =>
     Math.max(0, scoreCorridors(seedCorridors, SEED_NOW).score - 8),
   );
@@ -202,9 +223,10 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
   };
 
   const dealAction: WorkspaceState["dealAction"] = async (input) => {
-    setDeals((prev) =>
-      prev.map((d) => {
-        if (d.id !== input.dealId) return d;
+    setDeals((prev) => {
+      const target = prev.find((d) => d.id === input.dealId);
+      if (!target) return prev;
+      const step = (d: Deal): Deal => {
         switch (input.action) {
           case "counter":
             return applyAction(d, { kind: "counter", by: "borrower", terms: input.terms, note: input.note }, SEED_NOW);
@@ -221,8 +243,20 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
           default:
             return d;
         }
-      }),
-    );
+      };
+      let next = prev.map((d) => (d.id === input.dealId ? step(d) : d));
+      // Accepting one competing bid closes the parent request and the rivals.
+      if (input.action === "accept" && target.requestId) {
+        const reqId = target.requestId;
+        next = next.map((d) => {
+          if (d.id === reqId && d.status === "requested") return { ...d, status: "withdrawn", updatedAt: SEED_NOW };
+          if (d.requestId === reqId && d.id !== target.id && (d.status === "offered" || d.status === "countered"))
+            return { ...d, status: "declined", updatedAt: SEED_NOW };
+          return d;
+        });
+      }
+      return next;
+    });
   };
 
   const newId = (p: string) =>
@@ -259,11 +293,13 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
     };
     setPrevScore(score.score);
     setCorridors((prev) => [corridor, ...prev]);
+    if (settledNow) setRepayPrompt(fundedRepayPrompt(dealsRef.current, corridor.ref));
     return corridor;
   };
 
   const attest: WorkspaceState["attest"] = (id) => {
     setPrevScore(scoreCorridors(corridorsRef.current, SEED_NOW).score);
+    const target = corridorsRef.current.find((c) => c.id === id);
     setCorridors((prev) =>
       prev.map((c) =>
         c.id === id
@@ -279,6 +315,7 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
           : c,
       ),
     );
+    if (target) setRepayPrompt(fundedRepayPrompt(dealsRef.current, target.ref));
   };
 
   const refund: WorkspaceState["refund"] = (id) => {
@@ -341,6 +378,8 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
     maxAdvanceAed: requestHeadroom(score),
     requestCapital,
     dealAction,
+    repayPrompt,
+    dismissRepayPrompt: () => setRepayPrompt(null),
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -357,9 +396,12 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [prevScore, setPrevScore] = useState(0);
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [repayPrompt, setRepayPrompt] = useState<WorkspaceState["repayPrompt"]>(null);
 
   const corridorsRef = useRef<Corridor[]>(corridors);
   corridorsRef.current = corridors;
+  const dealsRef = useRef<Deal[]>(deals);
+  dealsRef.current = deals;
   const walletsRef = useRef(wallets);
   walletsRef.current = wallets;
 
@@ -477,6 +519,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     setOfferAccepted(false);
     setPrevScore(0);
     setDeals([]);
+    setRepayPrompt(null);
   }, [logout]);
 
   // Keep the recorded wallet address in sync once the embedded wallet exists.
@@ -520,6 +563,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
         corridorsRef.current = updated;
         return updated;
       });
+      if (settledImmediately) setRepayPrompt(fundedRepayPrompt(dealsRef.current, c.ref));
 
       void (async () => {
         const tok = await token();
@@ -571,6 +615,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
       if (!target) return;
       const settledAt = Date.now();
       setPrevScore(scoreCorridors(corridorsRef.current, now).score);
+      setRepayPrompt(fundedRepayPrompt(dealsRef.current, target.ref));
       patch(id, {
         status: "settled",
         settledAt,
@@ -789,6 +834,8 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     maxAdvanceAed: requestHeadroom(score),
     requestCapital,
     dealAction,
+    repayPrompt,
+    dismissRepayPrompt: () => setRepayPrompt(null),
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

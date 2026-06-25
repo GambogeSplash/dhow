@@ -8,6 +8,7 @@ import {
   setWallet,
   setOfferAccepted,
 } from "@/lib/store-server";
+import { sanitizeBusiness, isValidName } from "@/lib/validate";
 
 export const runtime = "nodejs";
 
@@ -61,10 +62,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ account });
     }
     case "profile": {
-      await saveBusinessProfile(userId, {
+      const clean = sanitizeBusiness({
         name: body.name ?? "",
         city: body.city ?? "",
         country: body.country ?? "",
+      });
+      if (!isValidName(clean.name)) {
+        return NextResponse.json({ error: "missing business name" }, { status: 400 });
+      }
+      await saveBusinessProfile(userId, {
+        ...clean,
         walletAddress: body.walletAddress,
       });
       return NextResponse.json({ account: await getAccount(userId) });

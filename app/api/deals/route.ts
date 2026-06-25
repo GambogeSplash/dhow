@@ -6,6 +6,7 @@ import {
   getAccount,
   insertDeal,
   saveDealStep,
+  closeRequestAndSiblings,
   listDealsForBorrower,
   listDealsForFinancier,
   listOpenRequests,
@@ -14,6 +15,7 @@ import {
   applyAction,
   openRequest,
   openOffer,
+  offerOnRequest,
   newDealId,
   clampTerms,
   DealError,
@@ -142,6 +144,25 @@ export async function POST(req: NextRequest) {
   if (!party) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   try {
+    // A financier offering on a still-open request creates a COMPETING bid (a
+    // sibling offer) rather than claiming the request, so several financiers can
+    // bid on the same request and the borrower picks.
+    if (body.action === "offer" && deal.status === "requested" && deal.financierId === null) {
+      if (party !== "financier") throw new DealError("Only a financier can offer.");
+      if (!body.terms) throw new DealError("missing terms");
+      const bid = offerOnRequest({
+        id: newDealId(),
+        request: deal,
+        financierId: userId,
+        financierName: FINANCIER.name,
+        terms: body.terms,
+        note: body.note,
+        now,
+      });
+      await insertDeal(bid);
+      return NextResponse.json({ deal: bid });
+    }
+
     let next: Deal;
     switch (body.action) {
       case "offer":
@@ -182,6 +203,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
     await saveDealStep(next, next.events[next.events.length - 1]);
+    // Accepting a competing bid closes the parent request and the losing bids.
+    if (body.action === "accept" && next.requestId) {
+      await closeRequestAndSiblings(next.requestId, next.id, now);
+    }
     return NextResponse.json({ deal: next });
   } catch (err) {
     if (err instanceof DealError) {

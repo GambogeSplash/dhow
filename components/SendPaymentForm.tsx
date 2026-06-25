@@ -1,13 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
+import type { Hex } from "viem";
 import { useCorridor } from "@/components/CorridorProvider";
 import { Avatar } from "@/components/Avatar";
 import { FaucetCard } from "@/components/FaucetCard";
+import { ChainBadge } from "@/components/ChainBadge";
 import { AED_PER_USD, makeCorridorUsdc, SettlementMode, usdcLabel } from "@/lib/corridor";
 import { press } from "@/lib/motion";
+import { chainConfigured, readBalances } from "@/lib/chain-client";
+import { cleanText, sanitizeSupplier, GOODS_MAX, NAME_MAX, PLACE_MAX } from "@/lib/validate";
 
 /*
  * The payment composer, extracted so it can live in a modal (the default in-app
@@ -32,17 +36,43 @@ export function SendPaymentForm({
   const [addingSupplier, setAddingSupplier] = useState(suppliers.length === 0);
   const [newSup, setNewSup] = useState({ name: "", city: "", country: "", walletAddress: "" });
 
+  // Live USDC balance for a pre-flight check. Null until a real balance is read
+  // (preview mode / unconfigured chain / no wallet leave it null, which skips
+  // the check so the happy path is never blocked on an unknown balance).
+  const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
+
+  const refreshBalance = useCallback(async () => {
+    if (!walletAddress || !chainConfigured()) {
+      setUsdcBalance(null);
+      return;
+    }
+    try {
+      const bal = await readBalances(walletAddress as Hex);
+      setUsdcBalance(bal ? bal.usdc : null);
+    } catch {
+      setUsdcBalance(null);
+    }
+  }, [walletAddress]);
+
+  useEffect(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
+
   const amountAed = Number(amount.replace(/[^0-9.]/g, "")) || 0;
   const amountUsdc = amountAed > 0 ? makeCorridorUsdc(amountAed) : 0;
-  const canSend = !!supplierId && amountAed > 0 && goods.trim().length > 0;
+  const goodsOver = goods.trim().length > GOODS_MAX;
+  const overBalance = usdcBalance !== null && amountUsdc > usdcBalance;
+  const canSend = !!supplierId && amountAed > 0 && goods.trim().length > 0 && !goodsOver && !overBalance;
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+  const newSupOver =
+    newSup.name.trim().length > NAME_MAX ||
+    newSup.city.trim().length > PLACE_MAX ||
+    newSup.country.trim().length > PLACE_MAX;
 
   function handleAddSupplier() {
-    if (!newSup.name.trim() || !newSup.city.trim() || !newSup.country.trim()) return;
+    if (!newSup.name.trim() || !newSup.city.trim() || !newSup.country.trim() || newSupOver) return;
     const s = addSupplier({
-      name: newSup.name,
-      city: newSup.city,
-      country: newSup.country,
+      ...sanitizeSupplier({ name: newSup.name, city: newSup.city, country: newSup.country }),
       walletAddress: newSup.walletAddress.trim() || undefined,
     });
     setSupplierId(s.id);
@@ -51,7 +81,8 @@ export function SendPaymentForm({
   }
 
   function handleSend() {
-    const c = sendPayment({ supplierId, goods, amountAed, mode });
+    if (!canSend) return;
+    const c = sendPayment({ supplierId, goods: cleanText(goods, GOODS_MAX), amountAed, mode });
     if (c) {
       onClose();
       router.push("/corridor");
@@ -106,18 +137,21 @@ export function SendPaymentForm({
               <input
                 placeholder="Supplier name"
                 value={newSup.name}
+                maxLength={NAME_MAX}
                 onChange={(e) => setNewSup({ ...newSup, name: e.target.value })}
                 className="rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-teal sm:col-span-3"
               />
               <input
                 placeholder="City"
                 value={newSup.city}
+                maxLength={PLACE_MAX}
                 onChange={(e) => setNewSup({ ...newSup, city: e.target.value })}
                 className="rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-teal"
               />
               <input
                 placeholder="Country"
                 value={newSup.country}
+                maxLength={PLACE_MAX}
                 onChange={(e) => setNewSup({ ...newSup, country: e.target.value })}
                 className="rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-teal"
               />
@@ -129,11 +163,15 @@ export function SendPaymentForm({
               />
               <button
                 onClick={handleAddSupplier}
-                className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper"
+                disabled={newSupOver}
+                className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Save supplier
               </button>
             </div>
+            {newSupOver && (
+              <p className="mt-2 text-xs text-danger">Name under {NAME_MAX} characters, city and country under {PLACE_MAX}.</p>
+            )}
             {suppliers.length > 0 && (
               <button
                 onClick={() => setAddingSupplier(false)}
@@ -153,10 +191,14 @@ export function SendPaymentForm({
           <input
             name="goods"
             value={goods}
+            maxLength={GOODS_MAX}
             onChange={(e) => setGoods(e.target.value)}
-            placeholder="e.g. Auto components, 2 × 40ft"
+            placeholder="e.g. Auto components, 2 x 40ft"
             className="mt-1.5 w-full rounded-[var(--radius-sm)] border border-line bg-surface px-3.5 py-2.5 text-ink outline-none placeholder:text-ink-faint focus:border-teal focus:ring-1 focus:ring-teal"
           />
+          {goodsOver && (
+            <span className="mt-1 block text-xs text-danger">Keep this under {GOODS_MAX} characters.</span>
+          )}
         </label>
 
         <label className="mt-5 block">
@@ -173,10 +215,16 @@ export function SendPaymentForm({
             />
           </div>
         </label>
-        <div className="mt-2 flex items-center gap-2 text-sm">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
           <span className="tnum font-mono text-teal-deep">{usdcLabel(amountUsdc)}</span>
-          <span className="text-ink-faint">· settles in USDC at peg {AED_PER_USD.toFixed(4)} AED/USD</span>
+          <span className="text-ink-faint">· peg {AED_PER_USD.toFixed(4)} AED/USD</span>
+          <ChainBadge />
         </div>
+        {overBalance && usdcBalance !== null && (
+          <p className="tnum mt-2 text-sm text-danger">
+            Amount exceeds your USDC balance ({usdcBalance.toLocaleString()} available)
+          </p>
+        )}
       </div>
 
       {/* mode */}

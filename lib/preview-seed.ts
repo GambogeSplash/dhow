@@ -13,7 +13,7 @@ import {
   makeCorridorUsdc,
 } from "./corridor";
 import type { Business, Supplier } from "./account";
-import { type Deal, dueAt } from "./deal";
+import { type Deal, type DealTerms, dueAt } from "./deal";
 
 export const SEED_NOW = 1_781_913_600_000; // fixed reference instant (~mid 2026)
 const DAY = 86_400_000;
@@ -265,36 +265,131 @@ export const seedFacility = {
 // and client (no hydration drift). The same al-Noor deal appears to the importer
 // (their offer to act on) and to the financier (an offer they've sent).
 
-/** Al Noor's live deal: Creek Capital has offered; the borrower's move. */
-export const seedImporterDeal: Deal = {
-  id: "deal_alnoor",
+const REQ_TERMS: DealTerms = { amountAed: 40_000, ratePct: 1.5, tenorDays: 30 };
+const REQ_PURPOSE = "Bridge the Gulf Steel shipment while Jebel Ali clears.";
+
+/** Al Noor's open request — it fans out to every financier on the network. */
+export const seedImporterRequest: Deal = {
+  id: "deal_alnoor_req",
+  borrowerId: "al-noor-trading",
+  borrowerName: "Al Noor Trading",
+  financierId: null,
+  financierName: null,
+  status: "requested",
+  turn: "financier",
+  terms: REQ_TERMS,
+  purpose: REQ_PURPOSE,
+  createdAt: SEED_NOW - 2 * DAY,
+  updatedAt: SEED_NOW - 2 * DAY,
+  events: [
+    { id: "ev_alnoor_req", actor: "borrower", kind: "requested", terms: REQ_TERMS, note: REQ_PURPOSE, createdAt: SEED_NOW - 2 * DAY },
+  ],
+};
+
+/** A competing bid against Al Noor's request (deterministic ids, no hydration drift). */
+function seedBid(args: {
+  id: string;
+  financierId: string;
+  financierName: string;
+  terms: DealTerms;
+  note: string;
+  offeredAt: number;
+}): Deal {
+  return {
+    id: args.id,
+    borrowerId: "al-noor-trading",
+    borrowerName: "Al Noor Trading",
+    financierId: args.financierId,
+    financierName: args.financierName,
+    status: "offered",
+    turn: "borrower",
+    terms: args.terms,
+    purpose: REQ_PURPOSE,
+    requestId: seedImporterRequest.id,
+    createdAt: args.offeredAt,
+    updatedAt: args.offeredAt,
+    events: [
+      { id: `${args.id}_req`, actor: "borrower", kind: "requested", terms: REQ_TERMS, note: REQ_PURPOSE, createdAt: SEED_NOW - 2 * DAY },
+      { id: `${args.id}_off`, actor: "financier", kind: "offered", terms: args.terms, note: args.note, createdAt: args.offeredAt },
+    ],
+  };
+}
+
+const bidCreek = seedBid({
+  id: "deal_alnoor_creek",
+  financierId: "fin_creek",
+  financierName: "Creek Capital",
+  terms: { amountAed: 36_000, ratePct: 1.5, tenorDays: 30 },
+  note: "Sized to your average corridor. Happy to revisit on a clean release.",
+  offeredAt: SEED_NOW - 1 * DAY,
+});
+const bidDunes = seedBid({
+  id: "deal_alnoor_dunes",
+  financierId: "fin_dunes",
+  financierName: "Dunes Trade Credit",
+  terms: { amountAed: 38_000, ratePct: 1.8, tenorDays: 45 },
+  note: "A little more, a little longer to repay.",
+  offeredAt: SEED_NOW - 20 * 3_600_000,
+});
+const bidLevant = seedBid({
+  id: "deal_alnoor_levant",
+  financierId: "fin_levant",
+  financierName: "Levant Working Capital",
+  terms: { amountAed: 34_000, ratePct: 1.3, tenorDays: 30 },
+  note: "Our keenest rate on steel flows.",
+  offeredAt: SEED_NOW - 16 * 3_600_000,
+});
+
+/** A live facility Al Noor already drew — funds the auto-repay prompt + facility view. */
+export const seedImporterFunded: Deal = {
+  id: "deal_alnoor_funded",
   borrowerId: "al-noor-trading",
   borrowerName: "Al Noor Trading",
   financierId: "fin_creek",
   financierName: "Creek Capital",
-  status: "offered",
+  status: "funded",
   turn: "borrower",
-  terms: { amountAed: 36_000, ratePct: 1.5, tenorDays: 30 },
-  purpose: "Bridge the Gulf Steel shipment while Jebel Ali clears.",
-  createdAt: SEED_NOW - 2 * DAY,
-  updatedAt: SEED_NOW - 1 * DAY,
+  terms: { amountAed: 30_000, ratePct: 1.5, tenorDays: 30 },
+  purpose: "Earlier steel corridor.",
+  financierWallet: wallet("creek-capital"),
+  fundedAt: SEED_NOW - 12 * DAY,
+  txHash: fakeHash("facility-alnoor"),
+  explorerUrl: `${EXPLORER}${fakeHash("facility-alnoor")}`,
+  dueAt: dueAt(SEED_NOW - 12 * DAY, 30),
+  createdAt: SEED_NOW - 14 * DAY,
+  updatedAt: SEED_NOW - 12 * DAY,
   events: [
-    {
-      id: "ev_alnoor_req",
-      actor: "borrower",
-      kind: "requested",
-      terms: { amountAed: 40_000, ratePct: 1.5, tenorDays: 30 },
-      note: "Bridge the Gulf Steel shipment while Jebel Ali clears.",
-      createdAt: SEED_NOW - 2 * DAY,
-    },
-    {
-      id: "ev_alnoor_off",
-      actor: "financier",
-      kind: "offered",
-      terms: { amountAed: 36_000, ratePct: 1.5, tenorDays: 30 },
-      note: "Sized to your average corridor. Happy to revisit on a clean release.",
-      createdAt: SEED_NOW - 1 * DAY,
-    },
+    { id: "ev_alf_req", actor: "borrower", kind: "requested", terms: { amountAed: 30_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 14 * DAY },
+    { id: "ev_alf_off", actor: "financier", kind: "offered", terms: { amountAed: 30_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 13 * DAY },
+    { id: "ev_alf_agr", actor: "borrower", kind: "agreed", terms: { amountAed: 30_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 12 * DAY - 3_600_000 },
+    { id: "ev_alf_fund", actor: "financier", kind: "funded", terms: { amountAed: 30_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 12 * DAY },
+  ],
+};
+
+/** A closed, repaid facility — populates the importer's deal history. */
+export const seedImporterClosed: Deal = {
+  id: "deal_alnoor_closed",
+  borrowerId: "al-noor-trading",
+  borrowerName: "Al Noor Trading",
+  financierId: "fin_creek",
+  financierName: "Creek Capital",
+  status: "repaid",
+  turn: "borrower",
+  terms: { amountAed: 22_000, ratePct: 1.5, tenorDays: 30 },
+  fundedAt: SEED_NOW - 60 * DAY,
+  dueAt: dueAt(SEED_NOW - 60 * DAY, 30),
+  repaidAt: SEED_NOW - 33 * DAY,
+  txHash: fakeHash("facility-alnoor-old"),
+  explorerUrl: `${EXPLORER}${fakeHash("facility-alnoor-old")}`,
+  repayTxHash: fakeHash("repay-alnoor-old"),
+  repayExplorerUrl: `${EXPLORER}${fakeHash("repay-alnoor-old")}`,
+  createdAt: SEED_NOW - 62 * DAY,
+  updatedAt: SEED_NOW - 33 * DAY,
+  events: [
+    { id: "ev_alc_off", actor: "financier", kind: "offered", terms: { amountAed: 22_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 61 * DAY },
+    { id: "ev_alc_agr", actor: "borrower", kind: "agreed", terms: { amountAed: 22_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 60 * DAY },
+    { id: "ev_alc_fund", actor: "financier", kind: "funded", terms: { amountAed: 22_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 60 * DAY },
+    { id: "ev_alc_repaid", actor: "borrower", kind: "repaid", terms: { amountAed: 22_000, ratePct: 1.5, tenorDays: 30 }, createdAt: SEED_NOW - 33 * DAY },
   ],
 };
 
@@ -348,8 +443,19 @@ const seedFundedZarah: Deal = {
   ],
 };
 
-/** All deals the financier preview surfaces (engaged + the open request). */
-export const seedFinancierDeals: Deal[] = [seedImporterDeal, seedFundedZarah, seedRequestCrescent];
+/** Al Noor's competing bids (the multi-financier hero on the importer side). */
+export const seedImporterBids: Deal[] = [bidCreek, bidDunes, bidLevant];
 
-/** The importer (Al Noor) preview's own deals. */
-export const seedImporterDeals: Deal[] = [seedImporterDeal];
+/** All deals the financier (Creek Capital) preview surfaces: its own bid on Al
+ *  Noor, the funded Zarah facility, and Crescent's open request to bid on. The
+ *  rival bids from Dunes/Levant stay on the borrower's side, not Creek's. */
+export const seedFinancierDeals: Deal[] = [bidCreek, seedFundedZarah, seedRequestCrescent];
+
+/** The importer (Al Noor) preview's own deals: an open request with three
+ *  competing offers, a live facility, and one repaid in the past. */
+export const seedImporterDeals: Deal[] = [
+  seedImporterRequest,
+  ...seedImporterBids,
+  seedImporterFunded,
+  seedImporterClosed,
+];

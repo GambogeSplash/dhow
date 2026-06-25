@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { motion } from "motion/react";
 import { useCorridor } from "@/components/CorridorProvider";
+import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
+import { ChainBadge } from "@/components/ChainBadge";
 import { DealStatusPill, TermsSummary, TermsEditor, DealThread, pct } from "@/components/deal-ui";
 import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
 import {
@@ -12,19 +14,20 @@ import {
   feeAed,
   totalRepayableAed,
   daysUntil,
+  statusLabel,
   DEFAULT_RATE_PCT,
   DEFAULT_TENOR_DAYS,
+  type Deal,
   type DealTerms,
 } from "@/lib/deal";
-import { springPop, springSoft, rise, press } from "@/lib/motion";
+import { springPop, springSoft, rise, stagger, riseItem, press } from "@/lib/motion";
 
 export default function CapitalPage() {
-  const { score, business, financier, activeDeal, maxAdvanceAed, requestCapital, dealAction } =
-    useCorridor();
+  const { score, business, financier, deals, maxAdvanceAed, requestCapital, dealAction } = useCorridor();
+  const { openAccept } = useOverlays();
 
   const now = Date.now();
   const [busy, setBusy] = useState(false);
-  const [countering, setCountering] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function run(fn: () => Promise<void>) {
@@ -32,7 +35,6 @@ export default function CapitalPage() {
     setBusy(true);
     try {
       await fn();
-      setCountering(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -40,8 +42,23 @@ export default function CapitalPage() {
     }
   }
 
-  // Gate: no deal yet and not eligible → locked.
-  if (!activeDeal && !score.eligible) {
+  // Slice the borrower's deals into the things the page shows at once.
+  const facility = deals.find((d) => d.status === "funded" || d.status === "agreed") ?? null;
+  const request = deals.find((d) => d.status === "requested") ?? null;
+  const bids = request
+    ? deals
+        .filter((d) => d.requestId === request.id && (d.status === "offered" || d.status === "countered"))
+        .sort((a, b) => a.terms.ratePct - b.terms.ratePct)
+    : [];
+  const single =
+    bids.length === 0
+      ? deals.find((d) => (d.status === "offered" || d.status === "countered") && !d.requestId) ?? null
+      : null;
+  const closed = deals.filter((d) => ["repaid", "declined", "withdrawn"].includes(d.status));
+  const negotiating = !!request || !!single;
+
+  // Nothing at all and not eligible yet: the locked state.
+  if (deals.length === 0 && !score.eligible) {
     return (
       <div className="mx-auto max-w-xl">
         <p className="text-sm text-ink-3">Capital</p>
@@ -57,8 +74,8 @@ export default function CapitalPage() {
           </div>
           <p className="mt-4 font-medium">Not yet unlocked</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
-            You can request working capital once your Credit Score crosses {ELIGIBLE_THRESHOLD}.
-            You&apos;re at {score.score}. Settle another corridor to get there.
+            You can request working capital once your Credit Score crosses {ELIGIBLE_THRESHOLD}. You&apos;re
+            at {score.score}. Settle another corridor to get there.
           </p>
           <Link
             href="/corridor"
@@ -71,198 +88,76 @@ export default function CapitalPage() {
     );
   }
 
-  const perms = activeDeal ? permissions(activeDeal, "borrower") : null;
-
   return (
     <div className="grid gap-8 lg:grid-cols-2">
-      {/* deal lifecycle — borrower side */}
-      <section>
+      {/* borrower side */}
+      <section className="space-y-6">
         <div className="flex items-center justify-between">
           <p className="text-sm text-ink-3">Capital</p>
-          {activeDeal && <DealStatusPill deal={activeDeal} viewer="borrower" />}
         </div>
-        <h1 className="font-display mt-1 text-3xl tracking-tight">
-          {!activeDeal
-            ? "Request working capital"
-            : activeDeal.status === "funded"
-              ? "Your facility"
-              : "Your deal"}
-        </h1>
+        <h1 className="font-display -mt-3 text-3xl tracking-tight">Working capital</h1>
 
-        {/* --- no deal: request form --- */}
-        {!activeDeal && (
-          <motion.div variants={rise} initial="hidden" animate="show" className="mt-5">
-            <p className="text-ink-2">
-              Ask {financier.name} for an advance against your settled corridors. You set the
-              amount and term; they respond with an offer you can accept or counter.
+        {/* active facility */}
+        {facility && <FacilityCard deal={facility} now={now} busy={busy} onRepay={() => run(() => dealAction({ action: "repay", dealId: facility.id }))} business={business?.name} />}
+
+        {/* competing offers */}
+        {request && bids.length > 0 && (
+          <OffersComparison request={request} bids={bids} busy={busy} onAccept={(id) => openAccept(id)} />
+        )}
+
+        {/* request submitted, no offers yet */}
+        {request && bids.length === 0 && (
+          <motion.div variants={rise} initial="hidden" animate="show" className="rounded-[var(--radius-card)] border border-brass/40 bg-surface p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-ink-faint">Request out to the network</p>
+              <DealStatusPill deal={request} viewer="borrower" />
+            </div>
+            <p className="font-display tnum mt-1 text-4xl tracking-tight text-brass-deep">{aed(request.terms.amountAed)}</p>
+            <p className="mt-1 text-sm text-ink-3">
+              {pct(request.terms.ratePct)} fee · {request.terms.tenorDays} days. Financiers on Dhow are
+              reviewing your cashflow; offers land here.
             </p>
-            <div className="mt-5 rounded-[var(--radius-card)] border border-line bg-surface p-5">
-              <div className="mb-4 flex items-center justify-between rounded-[var(--radius-card)] bg-teal-tint px-4 py-3">
-                <span className="text-sm text-teal-deep">Your headroom</span>
-                <span className="tnum font-display text-xl text-teal-deep">{aed(maxAdvanceAed)}</span>
-              </div>
-              <TermsEditor
-                initial={{
-                  amountAed: Math.min(maxAdvanceAed, Math.round(score.avgCorridorAed * 0.3) || 10_000),
-                  ratePct: DEFAULT_RATE_PCT,
-                  tenorDays: DEFAULT_TENOR_DAYS,
-                }}
-                maxAmountAed={maxAdvanceAed}
-                submitLabel="Send request →"
-                busy={busy}
-                noteLabel="What's it for? (optional)"
-                onSubmit={(terms, note) => run(() => requestCapital({ terms, purpose: note }))}
-              />
+            <div className="mt-4 flex gap-2 border-t border-line pt-4">
+              <button
+                onClick={() => run(() => dealAction({ action: "withdraw", dealId: request.id }))}
+                disabled={busy}
+                className="rounded-full px-4 py-2 text-sm text-ink-3 transition-colors hover:text-danger disabled:opacity-50"
+              >
+                Withdraw request
+              </button>
             </div>
           </motion.div>
         )}
 
-        {/* --- open negotiation --- */}
-        {activeDeal && ["requested", "offered", "countered"].includes(activeDeal.status) && (
-          <motion.div variants={rise} initial="hidden" animate="show" className="mt-5 space-y-5">
-            <div className="rounded-[var(--radius-card)] border border-brass/40 bg-surface p-5">
-              <p className="text-xs uppercase tracking-wide text-ink-faint">
-                {activeDeal.status === "requested" ? "Your request" : "On the table"}
-              </p>
-              <p className="font-display tnum mt-1 text-4xl tracking-tight text-brass-deep">
-                {aed(activeDeal.terms.amountAed)}
-              </p>
-              <p className="mt-1 text-sm text-ink-3">
-                {pct(activeDeal.terms.ratePct)} fee · {activeDeal.terms.tenorDays} days · repay{" "}
-                {aed(totalRepayableAed(activeDeal.terms))}
-              </p>
+        {/* a single (non-competitive) negotiation, e.g. a proactive offer */}
+        {single && <SingleNegotiation deal={single} maxAdvanceAed={maxAdvanceAed} busy={busy} run={run} dealAction={dealAction} onAccept={openAccept} />}
 
-              {countering ? (
-                <div className="mt-4 border-t border-line pt-4">
-                  <TermsEditor
-                    initial={activeDeal.terms}
-                    maxAmountAed={maxAdvanceAed}
-                    submitLabel="Send counter →"
-                    busy={busy}
-                    noteLabel="Add a note (optional)"
-                    onSubmit={(terms: DealTerms, note) =>
-                      run(() => dealAction({ action: "counter", dealId: activeDeal.id, terms, note }))
-                    }
-                  />
-                  <button
-                    onClick={() => setCountering(false)}
-                    className="mt-2 w-full text-center text-sm text-ink-3 hover:text-ink"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
-                  {perms?.canAccept && (
-                    <motion.button
-                      {...press}
-                      onClick={() => run(() => dealAction({ action: "accept", dealId: activeDeal.id }))}
-                      disabled={busy}
-                      className="flex-1 rounded-full bg-teal py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-deep disabled:opacity-50"
-                    >
-                      Accept {aed(activeDeal.terms.amountAed)}
-                    </motion.button>
-                  )}
-                  {perms?.canCounter && (
-                    <button
-                      onClick={() => setCountering(true)}
-                      disabled={busy}
-                      className="flex-1 rounded-full border border-line py-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface-sunk disabled:opacity-50"
-                    >
-                      Counter
-                    </button>
-                  )}
-                  {perms?.canWithdraw && (
-                    <button
-                      onClick={() => run(() => dealAction({ action: "withdraw", dealId: activeDeal.id }))}
-                      disabled={busy}
-                      className="rounded-full px-4 py-2.5 text-sm text-ink-3 transition-colors hover:text-danger disabled:opacity-50"
-                    >
-                      Withdraw
-                    </button>
-                  )}
-                  {activeDeal.status === "requested" && (
-                    <p className="w-full pt-1 text-sm text-ink-3">
-                      Waiting for {financier.name} to respond with an offer.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <DealTimeline deal={activeDeal} />
-          </motion.div>
+        {/* request form when nothing is in negotiation */}
+        {!negotiating && score.eligible && (
+          <RequestForm
+            hasFacility={!!facility}
+            maxAdvanceAed={maxAdvanceAed}
+            avgCorridorAed={score.avgCorridorAed}
+            financierName={financier.name}
+            busy={busy}
+            onRequest={(terms, note) => run(() => requestCapital({ terms, purpose: note }))}
+          />
         )}
 
-        {/* --- agreed, awaiting disbursement --- */}
-        {activeDeal && activeDeal.status === "agreed" && (
-          <motion.div variants={rise} initial="hidden" animate="show" className="mt-5 space-y-5">
-            <div className="rounded-[var(--radius-card)] border border-teal/40 bg-surface p-5">
-              <p className="font-medium text-teal-deep">Terms agreed</p>
-              <p className="mt-1 text-sm text-ink-3">
-                {financier.name} is disbursing {aed(activeDeal.terms.amountAed)} to your wallet.
-              </p>
-              <div className="mt-4 border-t border-line pt-4">
-                <TermsSummary terms={activeDeal.terms} />
-              </div>
-            </div>
-            <DealTimeline deal={activeDeal} />
-          </motion.div>
-        )}
+        {/* history */}
+        {closed.length > 0 && <DealHistory deals={closed} />}
 
-        {/* --- funded: active facility + repay --- */}
-        {activeDeal && activeDeal.status === "funded" && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={springPop}
-            className="mt-5 space-y-5"
-          >
-            <div className="overflow-hidden rounded-[var(--radius-card)] border border-teal/40 bg-surface">
-              <div className="bg-teal-tint px-6 py-6">
-                <p className="text-xs uppercase tracking-wide text-teal-deep">Capital landed</p>
-                <p className="font-display tnum mt-1 text-5xl tracking-tight text-teal-deep">
-                  {aed(activeDeal.terms.amountAed)}
-                </p>
-                <p className="mt-1 text-sm text-ink-3">Disbursed to {business?.name} by {financier.name}</p>
-              </div>
-              <div className="px-6">
-                <TermsSummary terms={activeDeal.terms} dueAt={activeDeal.dueAt} now={now} />
-              </div>
-              <div className="px-6 py-5">
-                <div className="mb-3 flex items-center justify-between rounded-[var(--radius-card)] bg-surface-sunk px-4 py-3 text-sm">
-                  <span className="text-ink-3">Due in</span>
-                  <span className="tnum font-medium">
-                    {activeDeal.dueAt ? Math.max(0, daysUntil(activeDeal.dueAt, now)) : activeDeal.terms.tenorDays} days
-                  </span>
-                </div>
-                <motion.button
-                  {...press}
-                  onClick={() => run(() => dealAction({ action: "repay", dealId: activeDeal.id }))}
-                  disabled={busy}
-                  className="w-full rounded-full bg-ink py-3 text-sm font-medium text-paper transition-colors hover:bg-ink-2 disabled:opacity-50"
-                >
-                  {busy ? "Repaying…" : `Repay ${aed(totalRepayableAed(activeDeal.terms))}`}
-                </motion.button>
-                <p className="mt-2 text-center text-xs text-ink-faint">
-                  Principal {aed(activeDeal.terms.amountAed)} + fee {aed(feeAed(activeDeal.terms))}
-                </p>
-              </div>
-            </div>
-            <DealTimeline deal={activeDeal} />
-          </motion.div>
-        )}
-
-        {err && <p className="mt-3 text-sm text-danger">{err}</p>}
+        {err && <p className="text-sm text-danger">{err}</p>}
       </section>
 
       {/* what the financier sees */}
       <section>
-        <p className="text-sm text-ink-3">What {financier.name} sees</p>
-        <h2 className="font-display mt-1 text-2xl tracking-tight">
-          A borrower banks reject, made legible
-        </h2>
-        <p className="mt-2 text-ink-2">{financier.blurb}</p>
+        <p className="text-sm text-ink-3">What financiers see</p>
+        <h2 className="font-display mt-1 text-2xl tracking-tight">A borrower banks reject, made legible</h2>
+        <p className="mt-2 text-ink-2">
+          Your request fans out to every financier on Dhow. They underwrite the cashflow they can see on
+          chain, then compete for it.
+        </p>
 
         <motion.div
           variants={rise}
@@ -295,9 +190,8 @@ export default function CapitalPage() {
           </div>
 
           <p className="border-t border-line pt-4 text-sm text-ink-2">
-            Every figure here is a payment Dhow settled and verified on-chain. {financier.name}{" "}
-            underwrites the cashflow it can see, not an attestation it has to trust. The feed stays
-            live only while {business?.name} keeps settling on Dhow.
+            Every figure here is a payment Dhow settled and verified on-chain. The feed stays live only
+            while {business?.name} keeps settling on Dhow.
           </p>
         </motion.div>
       </section>
@@ -305,12 +199,280 @@ export default function CapitalPage() {
   );
 }
 
-function DealTimeline({ deal }: { deal: ReturnType<typeof useCorridor>["activeDeal"] }) {
-  if (!deal) return null;
+/* ---- sections ---- */
+
+function OffersComparison({
+  request,
+  bids,
+  busy,
+  onAccept,
+}: {
+  request: Deal;
+  bids: Deal[];
+  busy: boolean;
+  onAccept: (dealId: string) => void;
+}) {
+  const best = bids[0]?.id; // lowest fee, pre-sorted
   return (
-    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
-      <p className="mb-4 text-sm font-medium text-ink-2">Negotiation</p>
-      <DealThread deal={deal} />
+    <motion.div variants={rise} initial="hidden" animate="show">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-ink-2">
+          {bids.length} offer{bids.length === 1 ? "" : "s"} on your {aed(request.terms.amountAed)} request
+        </p>
+        <span className="text-xs text-ink-faint">sorted by fee</span>
+      </div>
+      <motion.div variants={stagger} initial="hidden" animate="show" className="mt-3 space-y-3">
+        {bids.map((bid) => (
+          <motion.div
+            key={bid.id}
+            variants={riseItem}
+            className={`rounded-[var(--radius-card)] border bg-surface p-4 ${
+              bid.id === best ? "border-teal/50 ring-1 ring-teal/30" : "border-line"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Avatar name={bid.financierName ?? "Financier"} size={36} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{bid.financierName}</p>
+                    {bid.id === best && (
+                      <span className="rounded-full bg-teal-tint px-2 py-0.5 text-[11px] font-medium text-teal-deep">
+                        Best rate
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-ink-3">
+                    {pct(bid.terms.ratePct)} fee · {bid.terms.tenorDays} days
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-display tnum text-xl text-brass-deep">{aed(bid.terms.amountAed)}</p>
+                <p className="tnum text-xs text-ink-faint">repay {aed(totalRepayableAed(bid.terms))}</p>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
+              <p className="text-xs text-ink-3">
+                Fee {aed(feeAed(bid.terms))}
+                {bid.events.at(-1)?.note ? <span className="text-ink-faint"> · “{bid.events.at(-1)!.note}”</span> : null}
+              </p>
+              <motion.button
+                {...press}
+                onClick={() => onAccept(bid.id)}
+                disabled={busy}
+                className="shrink-0 rounded-full bg-teal px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-deep disabled:opacity-50"
+              >
+                Accept
+              </motion.button>
+            </div>
+          </motion.div>
+        ))}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function FacilityCard({
+  deal,
+  now,
+  busy,
+  onRepay,
+  business,
+}: {
+  deal: Deal;
+  now: number;
+  busy: boolean;
+  onRepay: () => void;
+  business?: string;
+}) {
+  if (deal.status === "agreed") {
+    return (
+      <motion.div variants={rise} initial="hidden" animate="show" className="rounded-[var(--radius-card)] border border-teal/40 bg-surface p-5">
+        <p className="font-medium text-teal-deep">Terms agreed</p>
+        <p className="mt-1 text-sm text-ink-3">
+          {deal.financierName} is disbursing {aed(deal.terms.amountAed)} to your wallet.
+        </p>
+        <div className="mt-4 border-t border-line pt-4">
+          <TermsSummary terms={deal.terms} />
+        </div>
+      </motion.div>
+    );
+  }
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={springPop}>
+      <div className="overflow-hidden rounded-[var(--radius-card)] border border-teal/40 bg-surface">
+        <div className="bg-teal-tint px-6 py-5">
+          <p className="text-xs uppercase tracking-wide text-teal-deep">Live facility</p>
+          <p className="font-display tnum mt-1 text-4xl tracking-tight text-teal-deep">{aed(deal.terms.amountAed)}</p>
+          <p className="mt-1 text-sm text-ink-3">From {deal.financierName} to {business}</p>
+          <ChainBadge className="mt-2" />
+        </div>
+        <div className="px-6">
+          <TermsSummary terms={deal.terms} dueAt={deal.dueAt} now={now} />
+        </div>
+        <div className="px-6 py-5">
+          <div className="mb-3 flex items-center justify-between rounded-[var(--radius-card)] bg-surface-sunk px-4 py-3 text-sm">
+            <span className="text-ink-3">Due in</span>
+            <span className="tnum font-medium">{deal.dueAt ? Math.max(0, daysUntil(deal.dueAt, now)) : deal.terms.tenorDays} days</span>
+          </div>
+          <motion.button
+            {...press}
+            onClick={onRepay}
+            disabled={busy}
+            className="w-full rounded-full bg-ink py-3 text-sm font-medium text-paper transition-colors hover:bg-ink-2 disabled:opacity-50"
+          >
+            {busy ? "Repaying…" : `Repay ${aed(totalRepayableAed(deal.terms))}`}
+          </motion.button>
+          <p className="mt-2 text-center text-xs text-ink-faint">Repays automatically from your next settlement, or clear it now.</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function SingleNegotiation({
+  deal,
+  maxAdvanceAed,
+  busy,
+  run,
+  dealAction,
+  onAccept,
+}: {
+  deal: Deal;
+  maxAdvanceAed: number;
+  busy: boolean;
+  run: (fn: () => Promise<void>) => Promise<void>;
+  dealAction: ReturnType<typeof useCorridor>["dealAction"];
+  onAccept: (dealId: string) => void;
+}) {
+  const [countering, setCountering] = useState(false);
+  const perms = permissions(deal, "borrower");
+  return (
+    <motion.div variants={rise} initial="hidden" animate="show" className="space-y-4">
+      <div className="rounded-[var(--radius-card)] border border-brass/40 bg-surface p-5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-wide text-ink-faint">Offer from {deal.financierName}</p>
+          <DealStatusPill deal={deal} viewer="borrower" />
+        </div>
+        <p className="font-display tnum mt-1 text-4xl tracking-tight text-brass-deep">{aed(deal.terms.amountAed)}</p>
+        <p className="mt-1 text-sm text-ink-3">
+          {pct(deal.terms.ratePct)} fee · {deal.terms.tenorDays} days · repay {aed(totalRepayableAed(deal.terms))}
+        </p>
+        {countering ? (
+          <div className="mt-4 border-t border-line pt-4">
+            <TermsEditor
+              initial={deal.terms}
+              maxAmountAed={maxAdvanceAed}
+              submitLabel="Send counter →"
+              busy={busy}
+              noteLabel="Add a note (optional)"
+              onSubmit={(terms: DealTerms, note) => run(() => dealAction({ action: "counter", dealId: deal.id, terms, note })).then(() => setCountering(false))}
+            />
+            <button onClick={() => setCountering(false)} className="mt-2 w-full text-center text-sm text-ink-3 hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+            {perms.canAccept && (
+              <motion.button {...press} onClick={() => onAccept(deal.id)} disabled={busy} className="flex-1 rounded-full bg-teal py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-deep disabled:opacity-50">
+                Accept {aed(deal.terms.amountAed)}
+              </motion.button>
+            )}
+            {perms.canCounter && (
+              <button onClick={() => setCountering(true)} disabled={busy} className="flex-1 rounded-full border border-line py-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface-sunk disabled:opacity-50">
+                Counter
+              </button>
+            )}
+            {perms.canWithdraw && (
+              <button onClick={() => run(() => dealAction({ action: "withdraw", dealId: deal.id }))} disabled={busy} className="rounded-full px-4 py-2.5 text-sm text-ink-3 transition-colors hover:text-danger disabled:opacity-50">
+                Decline
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
+        <p className="mb-4 text-sm font-medium text-ink-2">Negotiation</p>
+        <DealThread deal={deal} />
+      </div>
+    </motion.div>
+  );
+}
+
+function RequestForm({
+  hasFacility,
+  maxAdvanceAed,
+  avgCorridorAed,
+  financierName,
+  busy,
+  onRequest,
+}: {
+  hasFacility: boolean;
+  maxAdvanceAed: number;
+  avgCorridorAed: number;
+  financierName: string;
+  busy: boolean;
+  onRequest: (terms: DealTerms, note?: string) => void;
+}) {
+  return (
+    <motion.div variants={rise} initial="hidden" animate="show" className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
+      <p className="font-medium">{hasFacility ? "Request more capital" : "Request working capital"}</p>
+      <p className="mt-1 text-sm text-ink-2">
+        Set the amount and term; every financier on Dhow can bid, and you pick the best. Sized to your settled corridors.
+      </p>
+      <div className="mt-4 mb-4 flex items-center justify-between rounded-[var(--radius-card)] bg-teal-tint px-4 py-3">
+        <span className="text-sm text-teal-deep">Your headroom</span>
+        <span className="tnum font-display text-xl text-teal-deep">{aed(maxAdvanceAed)}</span>
+      </div>
+      <TermsEditor
+        initial={{ amountAed: Math.min(maxAdvanceAed, Math.round(avgCorridorAed * 0.3) || 10_000), ratePct: DEFAULT_RATE_PCT, tenorDays: DEFAULT_TENOR_DAYS }}
+        maxAmountAed={maxAdvanceAed}
+        submitLabel="Send request →"
+        busy={busy}
+        noteLabel="What's it for? (optional)"
+        onSubmit={onRequest}
+      />
+    </motion.div>
+  );
+}
+
+function DealHistory({ deals }: { deals: Deal[] }) {
+  return (
+    <div>
+      <p className="text-sm font-medium text-ink-2">History</p>
+      <div className="mt-3 space-y-2">
+        {deals
+          .slice()
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .map((d) => (
+            <div key={d.id} className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Avatar name={d.financierName ?? "Financier"} size={30} />
+                <div>
+                  <p className="text-sm font-medium">{d.financierName ?? "Working-capital request"}</p>
+                  <p className="text-xs text-ink-faint">
+                    {aed(d.terms.amountAed)} · {pct(d.terms.ratePct)} · {d.terms.tenorDays}d
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <DealStatusPill deal={d} viewer="borrower" />
+                {d.repayExplorerUrl && d.repayTxHash && (
+                  <a
+                    href={d.repayExplorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="tnum font-mono text-xs text-teal-deep underline decoration-teal/30 underline-offset-2 hover:decoration-teal"
+                  >
+                    {d.repayTxHash.slice(0, 6)}…{d.repayTxHash.slice(-4)} ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+      </div>
     </div>
   );
 }

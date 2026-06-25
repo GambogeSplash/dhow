@@ -114,6 +114,7 @@ export interface Deal {
   turn: DealParty; // whose move it is (meaningless once closed)
   terms: DealTerms; // the live terms on the table
   purpose?: string;
+  requestId?: string; // set on a competing offer: the borrower request it answers
   financierWallet?: string; // the address that funded — where repayment is sent
   fundedAt?: number;
   txHash?: string;
@@ -295,6 +296,39 @@ export function openRequest(args: {
     createdAt: args.now,
     updatedAt: args.now,
     events: [event("borrower", "requested", args.now, terms, args.purpose)],
+  };
+}
+
+/** A financier's competing offer against an open borrower request. The request
+ *  stays open so other financiers can also bid; this offer is a sibling the
+ *  borrower can accept (which closes the request and the other bids). */
+export function offerOnRequest(args: {
+  id: string;
+  request: Deal;
+  financierId: string;
+  financierName: string;
+  terms: DealTerms;
+  note?: string;
+  now: number;
+}): Deal {
+  const terms = clampTerms(args.terms);
+  return {
+    id: args.id,
+    borrowerId: args.request.borrowerId,
+    borrowerName: args.request.borrowerName,
+    financierId: args.financierId,
+    financierName: args.financierName,
+    status: "offered",
+    turn: "borrower",
+    terms,
+    purpose: args.request.purpose,
+    requestId: args.request.id,
+    createdAt: args.now,
+    updatedAt: args.now,
+    events: [
+      { id: eventId(), actor: "borrower", kind: "requested", terms: args.request.terms, note: args.request.purpose, createdAt: args.request.createdAt },
+      { id: eventId(), actor: "financier", kind: "offered", terms, note: args.note, createdAt: args.now },
+    ],
   };
 }
 

@@ -293,6 +293,7 @@ type DealRow = {
   rate_pct: number;
   tenor_days: number;
   purpose: string | null;
+  request_id: string | null;
   financier_wallet: string | null;
   funded_at: string | number | null;
   tx_hash: string | null;
@@ -341,6 +342,7 @@ function toDeal(r: DealRow, events: DealEvent[]): Deal {
     turn: r.turn as Deal["turn"],
     terms: { amountAed: num(r.amount_aed), ratePct: num(r.rate_pct), tenorDays: Number(r.tenor_days) },
     purpose: r.purpose ?? undefined,
+    requestId: r.request_id ?? undefined,
     financierWallet: r.financier_wallet ?? undefined,
     fundedAt: r.funded_at == null ? undefined : num(r.funded_at),
     txHash: r.tx_hash ?? undefined,
@@ -409,13 +411,36 @@ export async function insertDeal(d: Deal): Promise<void> {
   await sql`
     INSERT INTO deals (
       id, borrower_id, borrower_name, financier_id, financier_name, status, turn,
-      amount_aed, rate_pct, tenor_days, purpose, created_at, updated_at
+      amount_aed, rate_pct, tenor_days, purpose, request_id, created_at, updated_at
     ) VALUES (
       ${d.id}, ${d.borrowerId}, ${d.borrowerName}, ${d.financierId}, ${d.financierName}, ${d.status}, ${d.turn},
-      ${d.terms.amountAed}, ${d.terms.ratePct}, ${d.terms.tenorDays}, ${d.purpose ?? null}, ${d.createdAt}, ${d.updatedAt}
+      ${d.terms.amountAed}, ${d.terms.ratePct}, ${d.terms.tenorDays}, ${d.purpose ?? null}, ${d.requestId ?? null}, ${d.createdAt}, ${d.updatedAt}
     )
   `;
   for (const e of d.events) await insertDealEvent(d.id, e);
+}
+
+/** Competing offers a borrower has received against one request. */
+export async function listSiblingOffers(requestId: string): Promise<Deal[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM deals WHERE request_id = ${requestId} ORDER BY created_at ASC
+  `) as DealRow[];
+  return hydrate(rows);
+}
+
+/** When one offer is accepted, close the parent request and the losing bids. */
+export async function closeRequestAndSiblings(requestId: string, winningDealId: string, now: number): Promise<void> {
+  const sql = db();
+  await sql`
+    UPDATE deals SET status = 'withdrawn', updated_at = ${now}
+    WHERE id = ${requestId} AND status = 'requested'
+  `;
+  await sql`
+    UPDATE deals SET status = 'declined', updated_at = ${now}
+    WHERE request_id = ${requestId} AND id <> ${winningDealId}
+      AND status IN ('offered', 'countered')
+  `;
 }
 
 /** Persist the mutable deal fields after an action, and append the new event. */

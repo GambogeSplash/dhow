@@ -6,6 +6,7 @@ import { SendPaymentForm } from "@/components/SendPaymentForm";
 import { AddSupplierForm } from "@/components/AddSupplierForm";
 import { AttestProofForm } from "@/components/AttestProofForm";
 import { RefundDisputeForm } from "@/components/RefundDisputeForm";
+import { AcceptOfferForm } from "@/components/AcceptOfferForm";
 
 /*
  * Importer overlay manager. Focused tasks (compose a payment, add a supplier)
@@ -19,6 +20,7 @@ interface Overlays {
   openAddSupplier: () => void;
   openAttest: (corridorId: string) => void;
   openRefund: (corridorId: string) => void;
+  openAccept: (dealId: string) => void;
   close: () => void;
 }
 
@@ -29,20 +31,23 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
   const [addSupplier, setAddSupplier] = useState(false);
   const [attestId, setAttestId] = useState<string | null>(null);
   const [refundId, setRefundId] = useState<string | null>(null);
+  const [acceptId, setAcceptId] = useState<string | null>(null);
 
   const openSend = useCallback((supplierId?: string) => setSend({ open: true, supplierId }), []);
   const openAddSupplier = useCallback(() => setAddSupplier(true), []);
   const openAttest = useCallback((corridorId: string) => setAttestId(corridorId), []);
   const openRefund = useCallback((corridorId: string) => setRefundId(corridorId), []);
+  const openAccept = useCallback((dealId: string) => setAcceptId(dealId), []);
   const close = useCallback(() => {
     setSend({ open: false });
     setAddSupplier(false);
     setAttestId(null);
     setRefundId(null);
+    setAcceptId(null);
   }, []);
 
   return (
-    <Ctx.Provider value={{ openSend, openAddSupplier, openAttest, openRefund, close }}>
+    <Ctx.Provider value={{ openSend, openAddSupplier, openAttest, openRefund, openAccept, close }}>
       {children}
 
       <Modal open={send.open} onClose={() => setSend({ open: false })} title="Pay a supplier" maxWidth="max-w-2xl">
@@ -61,6 +66,10 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
 
       <Modal open={!!refundId} onClose={() => setRefundId(null)} title="Dispute & refund">
         {refundId && <RefundDisputeForm corridorId={refundId} onClose={() => setRefundId(null)} />}
+      </Modal>
+
+      <Modal open={!!acceptId} onClose={() => setAcceptId(null)} title="Accept this offer">
+        {acceptId && <AcceptOfferForm dealId={acceptId} onClose={() => setAcceptId(null)} />}
       </Modal>
     </Ctx.Provider>
   );

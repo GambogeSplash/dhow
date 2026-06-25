@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useAccount } from "@/components/CorridorProvider";
 import { Avatar } from "@/components/Avatar";
 import { DhowMark } from "@/components/DhowMark";
+import { sanitizeBusiness, sanitizeSupplier, NAME_MAX, PLACE_MAX } from "@/lib/validate";
 
 type Step = "signin" | "business" | "supplier";
 
@@ -48,16 +49,14 @@ export default function OnboardingPage() {
 
   function handleBusiness(e: React.FormEvent) {
     e.preventDefault();
-    saveBusiness({ name: bizName, city, country });
+    saveBusiness(sanitizeBusiness({ name: bizName, city, country }));
     setStep("supplier");
   }
 
   function handleSupplier(e: React.FormEvent) {
     e.preventDefault();
     addSupplier({
-      name: supName,
-      city: supCity,
-      country: supCountry,
+      ...sanitizeSupplier({ name: supName, city: supCity, country: supCountry }),
       walletAddress: supWallet.trim() || undefined,
     });
     router.replace("/overview");
@@ -117,10 +116,10 @@ export default function OnboardingPage() {
             <p className="mt-2 text-ink-2">
               This is the importer on record, the borrower a financier sees.
             </p>
-            <Field label="Business name" required value={bizName} onChange={setBizName} placeholder="e.g. Al Noor Trading" autoFocus />
+            <Field label="Business name" required value={bizName} onChange={setBizName} placeholder="e.g. Al Noor Trading" maxLength={NAME_MAX} autoFocus />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="City" required value={city} onChange={setCity} placeholder="Dubai" />
-              <Field label="Country" required value={country} onChange={setCountry} placeholder="UAE" />
+              <Field label="City" required value={city} onChange={setCity} placeholder="Dubai" maxLength={PLACE_MAX} />
+              <Field label="Country" required value={country} onChange={setCountry} placeholder="UAE" maxLength={PLACE_MAX} />
             </div>
             <Submit disabled={!bizName.trim() || !city.trim() || !country.trim()}>
               Continue
@@ -149,10 +148,10 @@ export default function OnboardingPage() {
               where USDC settles on-chain — you can add it later if you don&apos;t
               have it yet.
             </p>
-            <Field label="Supplier name" required value={supName} onChange={setSupName} placeholder="e.g. Meridian Components" autoFocus />
+            <Field label="Supplier name" required value={supName} onChange={setSupName} placeholder="e.g. Meridian Components" maxLength={NAME_MAX} autoFocus />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="City" required value={supCity} onChange={setSupCity} placeholder="Shenzhen" />
-              <Field label="Country" required value={supCountry} onChange={setSupCountry} placeholder="China" />
+              <Field label="City" required value={supCity} onChange={setSupCity} placeholder="Shenzhen" maxLength={PLACE_MAX} />
+              <Field label="Country" required value={supCountry} onChange={setSupCountry} placeholder="China" maxLength={PLACE_MAX} />
             </div>
             <Field
               label="Supplier wallet address (optional)"
@@ -183,6 +182,7 @@ function Field({
   type = "text",
   required,
   placeholder,
+  maxLength,
   autoFocus,
 }: {
   label: string;
@@ -191,9 +191,11 @@ function Field({
   type?: string;
   required?: boolean;
   placeholder?: string;
+  maxLength?: number;
   autoFocus?: boolean;
 }) {
   const name = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const over = maxLength !== undefined && value.trim().length > maxLength;
   return (
     <label className="mt-4 block">
       <span className="text-sm font-medium text-ink-2">{label}</span>
@@ -202,11 +204,15 @@ function Field({
         name={name}
         required={required}
         value={value}
+        maxLength={maxLength}
         autoFocus={autoFocus}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1.5 w-full rounded-[var(--radius-sm)] border border-line bg-surface px-3.5 py-2.5 text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-teal focus:ring-1 focus:ring-teal"
       />
+      {over && (
+        <span className="mt-1 block text-xs text-danger">Keep this under {maxLength} characters.</span>
+      )}
     </label>
   );
 }
