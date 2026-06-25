@@ -43,7 +43,6 @@ export default function CorridorPage() {
     <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
       {/* score */}
       <section>
-        <p className="text-sm text-ink-3">Cashflow Record</p>
         <h1 className="font-display mt-1 text-3xl tracking-tight">Credit Score</h1>
         <p className="mt-2 text-ink-2">
           Built only from settlements. This is the number a financier

@@ -35,7 +35,6 @@ export default function OverviewPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm text-ink-3">Overview</p>
           <h1 className="font-display mt-1 text-3xl tracking-tight">
             {business?.name}
           </h1>

@@ -17,7 +17,6 @@ export default function OpportunitiesPage() {
 
   return (
     <div>
-      <p className="text-sm text-ink-3">Opportunities</p>
       <h1 className="font-display mt-1 text-3xl tracking-tight">Scored borrowers</h1>
       <p className="mt-2 max-w-xl text-ink-2">
         Every figure is a payment Dhow settled and verified on-chain. You underwrite the cashflow you

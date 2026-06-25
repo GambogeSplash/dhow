@@ -45,7 +45,6 @@ export default function RequestsPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-3">Desk</p>
         {rows.length > 0 && (
           <span className="rounded-full bg-brass-tint px-3 py-1 text-xs font-medium text-brass-deep">
             {rows.length} awaiting you
