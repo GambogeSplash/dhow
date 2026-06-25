@@ -91,7 +91,10 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     }
 
     function setInspector(address inspector_) external onlyOwner {
+        if (inspector_ == address(0)) revert DhowEscrow__InvalidInspector();
+
         inspector = inspector_;
+
         emit InspectorChanged(inspector_);
     }
 
@@ -102,16 +105,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
 
     /// @notice Lock funds for a corridor. Payer must have approved this contract.
     function lock(bytes32 corridorId, address supplier, uint256 amount, uint64 deadline) external nonReentrant {
-        if (locks[corridorId].status != Status.None) revert DhowEscrow__CorridorExists();
-        if (supplier == address(0)) revert DhowEscrow__InvalidSupplier();
-        if (amount == 0) revert DhowEscrow__InvalidAmount();
-
-        locks[corridorId] =
-            Lock({payer: msg.sender, supplier: supplier, amount: amount, deadline: deadline, status: Status.Locked});
-
-        I_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
-
-        emit Locked(corridorId, msg.sender, supplier, amount, deadline);
+        _lock(corridorId, supplier, amount, deadline);
     }
 
     /// @notice Release funds against a real EAS shipment-proof attestation.
@@ -137,6 +131,19 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /*////////////////////////////////////////////////////////////////
                         INTERNAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
+    function _lock(bytes32 corridorId, address supplier, uint256 amount, uint64 deadline) internal {
+        if (locks[corridorId].status != Status.None) revert DhowEscrow__CorridorExists();
+        if (supplier == address(0)) revert DhowEscrow__InvalidSupplier();
+        if (amount == 0) revert DhowEscrow__InvalidAmount();
+
+        locks[corridorId] =
+            Lock({payer: msg.sender, supplier: supplier, amount: amount, deadline: deadline, status: Status.Locked});
+
+        I_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit Locked(corridorId, msg.sender, supplier, amount, deadline);
+    }
+
     function _releaseWithAttestation(bytes32 corridorId, bytes32 attestationUid) internal {
         if (!requireEas) revert DhowEscrow__EasRequired(); // when EAS is off, use releaseByInspector
 
