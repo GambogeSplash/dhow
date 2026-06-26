@@ -36,7 +36,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     error DhowEscrow__InvalidInspector();
 
     /*//////////////////////////////////////////////////////////////
-                           TYPE DECLARATIONS
+                        TYPE DECLARATIONS
     //////////////////////////////////////////////////////////////*/
     using SafeERC20 for IERC20;
 
