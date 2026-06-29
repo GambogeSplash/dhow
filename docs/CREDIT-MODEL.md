@@ -28,18 +28,20 @@ Expected Loss = PD × LGD × EAD
 Everything below is just Dhow measuring those three things from facts it can
 see, and turning them into an offer.
 
-## 2. Why this replaced the v1 score
+## 2. Why the behaviour score isn't the whole answer
 
-v1 (the `creditScore` function — now folded into `lib/credit.ts` alongside
-v2, and mirrored on-chain in `DhowScoreRegistry`) was a single 0–100 number from
-settlement history. Two problems:
+The first layer, `creditScore` (in `lib/credit.ts`, mirrored on-chain in
+`DhowScoreRegistry`), is a single 0–100 number from settlement history. On its
+own it has two problems:
 
-1. It conflated *will they pay* (PD), *how much can they handle* (capacity), and
+1. It conflates *will they pay* (PD), *how much can they handle* (capacity), and
    *how much we'd recover* (LGD) into one figure.
-2. It could be **gamed by paying yourself** — fat settlements to your own wallet
-   inflated the score.
+2. It can be **gamed by paying yourself** — fat settlements to your own wallet
+   inflate the score.
 
-v2 splits the decision into five layers and closes the self-dealing hole.
+So it's not the decision — it's an input. The second layer, `assessCredit`,
+consumes it as a character signal and splits the actual decision into five
+layers, closing the self-dealing hole along the way.
 
 ## 3. Dhow's data stance (the important bit)
 
@@ -178,16 +180,16 @@ A grade-B importer, AED 600k/mo throughput, a verified AED 300k receivable due i
 You own the on-chain side (`DhowScoreRegistry`, `DhowEscrow`). Here's how to map
 this model to it and verify parity.
 
-**What's already yours, on-chain.** `DhowScoreRegistry._score` is the v1
-single score. **It is not obsolete** — in v2 it becomes the *character* input to
-the Grade layer (the "does this business pay its obligations" half). Keep it.
+**What's already yours, on-chain.** `DhowScoreRegistry._score` is the behaviour
+score. **It is not obsolete** — it's the *character* input to the Grade layer
+(the "does this business pay its obligations" half). Keep it.
 
 **Why it's safe to reason about.** `lib/credit.ts` is **pure and deterministic**:
 every output is a function of `(facts, now)` and nothing else — no clock reads
 inside, no network, no randomness. That's the same property the registry sells
 ("any financier can recompute from immutable facts"). So on-chain and off-chain
-numbers can be made to agree within integer rounding, exactly as v1's
-`_score` already mirrors the v1 `creditScore` (in `lib/credit.ts`).
+numbers can be made to agree within integer rounding, exactly as `_score`
+already mirrors `creditScore` (in `lib/credit.ts`).
 
 **The two new on-chain needs** (detailed in
 [`contracts/CREDIT-V2-IMPACT.md`](../contracts/CREDIT-V2-IMPACT.md)):
@@ -202,8 +204,8 @@ numbers can be made to agree within integer rounding, exactly as v1's
 
 **Decision waiting on you:** Path A (minimal — registry stays the character
 score, add the receivable schema + resolution fact; health factor stays
-off-chain but recomputable) vs Path B (full on-chain v2 — registry also stores
-**exposure**, which is the one datum that would make the health factor
+off-chain but recomputable) vs Path B (full on-chain assessment — registry also
+stores **exposure**, which is the one datum that would make the health factor
 *trustlessly* recomputable on-chain). Recommendation: **Path A now, Path B once
 the model proves out.**
 
