@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
 );
 CREATE INDEX IF NOT EXISTS suppliers_business_idx ON suppliers(business_id);
 
-CREATE TABLE IF NOT EXISTS corridors (
+CREATE TABLE IF NOT EXISTS payments (
   id                 TEXT PRIMARY KEY,
   business_id        TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   ref                TEXT NOT NULL,            -- DHW-####
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS corridors (
   explorer_url       TEXT,
   tx_state           TEXT                      -- pending | confirmed | failed
 );
-CREATE INDEX IF NOT EXISTS corridors_business_idx ON corridors(business_id);
+CREATE INDEX IF NOT EXISTS payments_business_idx ON payments(business_id);
 
 -- Incoming claims a business is owed (the inflow side). A verified receivable
 -- (status='verified' with an attestation_uid) secures a larger, cheaper

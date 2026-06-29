@@ -26,12 +26,12 @@ strict signing rule:
    refund  (USER signs)             (FINANCIER signs)
         │                                │
         ▼            app/api             ▼
-   account · suppliers · corridors · attest · score · borrowers · facilities · faucet
+   account · suppliers · payments · attest · score · borrowers · facilities · faucet
         │   (Privy-verified persistence + operator-only chain actions)
         ▼
    Postgres (Neon)              Polygon Amoy
    businesses/suppliers/         DhowEscrow · DhowScoreRegistry
-   corridors/facilities          EAS attestation · USDC
+   payments/facilities          EAS attestation · USDC
 ```
 
 **Signing rule (do not break it):**
@@ -56,7 +56,7 @@ Everything under `contracts/`. You own the on-chain truth layer.
 
 | File | What it is |
 | --- | --- |
-| `contracts/src/DhowEscrow.sol` | The Proof-Lock. `lock` → `releaseWithAttestation` (EAS-gated, permissionless once a valid attestation exists) → `refund` (after deadline). `releaseByInspector` is the owner-gated fallback. On every release/refund it calls the registry's `recordSettlement` in the **same transaction** (wrapped in try/catch so accounting can never block the money). `corridorId = keccak256(ref)` is the universal key. |
+| `contracts/src/DhowEscrow.sol` | The Proof-Lock. `lock` → `releaseWithAttestation` (EAS-gated, permissionless once a valid attestation exists) → `refund` (after deadline). `releaseByInspector` is the owner-gated fallback. On every release/refund it calls the registry's `recordSettlement` in the **same transaction** (wrapped in try/catch so accounting can never block the money). `paymentId = keccak256(ref)` is the universal key. |
 | `contracts/src/DhowScoreRegistry.sol` | On-chain credit reputation, computed from facts. `recordSettlement` is **escrow-only** (the `recorder`); `scoreOf` / `isEligible` compute the live score on-chain from the raw `statsOf` facts. No off-chain poster — the financier reads a number that moves with the money even if Dhow's backend is down. |
 | `contracts/src/MockUSDC.sol` | 6-dp open-mint test token. Stand-in for Circle USDC. |
 | `contracts/src/interfaces/IEAS.sol` | Minimal vendored EAS interface so the escrow verifies attestations without a heavy dep. `test/mocks/MockEAS.sol` is the EAS-compatible stand-in used on Amoy. |
@@ -83,12 +83,12 @@ operator chain spine.
 | File | What it is |
 | --- | --- |
 | `lib/db.ts` | Neon serverless Postgres client + `dbConfigured()` gate. |
-| `db/schema.sql` | businesses / suppliers / corridors / facilities. Apply this to your DB. |
+| `db/schema.sql` | businesses / suppliers / payments / facilities. Apply this to your DB. |
 | `lib/store-server.ts` | Server-authoritative CRUD, **every function scoped by `businessId` (the verified Privy DID)** — a caller can only touch their own rows. |
 | `lib/privy-server.ts` | `getUserId(req)` / `privyConfigured()` — verifies the Privy access token. Every mutating route gates on this. |
 | `lib/chain.ts` | Server-only viem signer for **operator** actions: EAS attest, score post/read, faucet, USDC transfer. Env-gated via `getChainConfig()`. |
 | `lib/eas.ts` | Inspector signs a shipment-proof attestation, returns its uid for release. |
-| `lib/indexer.ts` | Reads escrow events so the financier derives a borrower's corridors from chain state, cross-machine. |
+| `lib/indexer.ts` | Reads escrow events so the financier derives a borrower's payments from chain state, cross-machine. |
 | `app/api/account` | GET/POST the authenticated business profile + wallet. |
 | `app/api/suppliers` | POST add a supplier. |
 | `app/api/payments` | GET (public chain-derived feed by payer) · POST (create after user signs) · PATCH (lifecycle). |
@@ -117,7 +117,7 @@ and the design language.
 | --- | --- |
 | `app/page.tsx` | Landing. |
 | `app/onboarding/` | Sign in (Privy) → business → supplier → wallet. |
-| `app/(app)/{overview,send,corridor,capital,suppliers}` | Importer surfaces. |
+| `app/(app)/{overview,send,credit,capital,suppliers}` | Importer surfaces. |
 | `app/(financier)/{desk,opportunities,deal/[business],portfolio}` | Financier surfaces. |
 | `components/CreditProvider.tsx` | Importer client store: `useCredit` / `useAccount` / `useWorkspace`. Privy auth + DB persistence + user-signed writes. `attest()` runs the full attest → release → post-score chain. |
 | `components/FinancierProvider.tsx` | Financier store: borrowers from `/api/borrowers` + on-chain score overlay; funds via a real signed USDC transfer. |

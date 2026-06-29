@@ -36,7 +36,7 @@ matrix. Update the status as cases get covered.
 | Faucet called when chain is unconfigured | 503 with a clear error | Handled |
 | Borrower has no settlement wallet address | Financier cannot fund; show why | Handled (`isFullAddress` guard in `fund`) |
 | Wallet on the wrong chain when signing | Switch to the Dhow chain before the tx | Handled (`switchChain` in the client signer) |
-| User rejects the signature in their wallet | Treat as cancelled, no corridor/facility created, no score change | Partial (error surfaced; confirm no phantom row) |
+| User rejects the signature in their wallet | Treat as cancelled, no payment/facility created, no score change | Partial (error surfaced; confirm no phantom row) |
 
 ## 3. Sending a payment (open and Proof-Lock)
 
@@ -49,7 +49,7 @@ matrix. Update the status as cases get covered.
 | Very large amount (overflow, USDC 6-dp precision) | No precision loss; rounds to 6 dp deterministically | Partial (`makeUsdc` rounds; add an upper bound) |
 | Duplicate ref collision (`DHW-####`) | Refs stay unique | Handled (server increments; preview increments by count) |
 | Network drops after the user signs but before confirmation | Show pending, reconcile to confirmed/failed; do not double-send | Partial (`txState` pending/confirmed/failed exists; reconcile path to verify) |
-| User double-clicks send | One corridor, one tx | Partial (disable button while in-flight; confirm) |
+| User double-clicks send | One payment, one tx | Partial (disable button while in-flight; confirm) |
 
 ## 4. Escrow: lock, release, attestation
 
@@ -59,7 +59,7 @@ matrix. Update the status as cases get covered.
 | Attestation for the wrong schema | Reverts | Handled |
 | Attestation revoked or expired | Reverts | Handled |
 | Attestation signed by someone other than the inspector | Reverts | Handled |
-| Attestation for a different corridor (replay) | Reverts; `corridorId = keccak256(ref)` binds it | Handled |
+| Attestation for a different payment (replay) | Reverts; `paymentId = keccak256(ref)` binds it | Handled |
 | Double release of the same lock | Reverts (state already released) | Handled |
 | Reentrancy on release/refund | Guarded | Handled (`ReentrancyGuard`, SafeERC20) |
 | EAS unavailable but a release must happen on stage | Owner fallback `releaseByInspector` when `requireEas` is off | Handled (deliberate stage-resilience path) |
@@ -72,10 +72,10 @@ matrix. Update the status as cases get covered.
 | --- | --- | --- |
 | Refund before the deadline | Reverts (refund is deadline-gated) | Handled |
 | Refund after the deadline on an unreleased lock | Returns funds to the buyer | Handled |
-| Refund on an already-released corridor | Reverts | Handled |
+| Refund on an already-released payment | Reverts | Handled |
 | Refund correctly affects the score | Proof performance drops; a refunded prooflock counts as resolved-but-not-clean | Handled (verified: `proofMetRatio` uses resolved vs clean) |
 | Disputed open settlement (no escrow) | Cannot phantom-refund; only prooflocks refund | Handled (open-settlement phantom-proof bug previously fixed) |
-| Refund of a corridor whose write earlier failed | Excluded from score either way | Handled (`txState === "failed"` excluded) |
+| Refund of a payment whose write earlier failed | Excluded from score either way | Handled (`txState === "failed"` excluded) |
 
 ## 6. Scoring engine (`lib/credit.ts`)
 
@@ -140,16 +140,16 @@ matrix. Update the status as cases get covered.
 | --- | --- | --- |
 | DB not configured | App renders; DB features gate off | Handled (`dbConfigured`) |
 | Schema not applied | Routes fail clearly, not silently | Partial (confirm error messaging) |
-| Partial write (corridor row created, chain tx failed) | Reconcile so the row reflects `failed`, excluded from score | Handled (`txState`, score filter) |
-| Duplicate corridor on retry | No duplicate rows | Partial (verify idempotency key on create) |
+| Partial write (payment row created, chain tx failed) | Reconcile so the row reflects `failed`, excluded from score | Handled (`txState`, score filter) |
+| Duplicate payment on retry | No duplicate rows | Partial (verify idempotency key on create) |
 | Optimistic UI vs server truth divergence | Reconcile to server/chain | Partial (optimistic-then-reconcile pattern) |
 
 ## 12. Concurrency and races
 
 | Scenario | Expected | Status |
 | --- | --- | --- |
-| Two payments sent in quick succession | Distinct refs, distinct corridors | Handled |
-| Attest and refund clicked on the same corridor near-simultaneously | One terminal state wins; contract enforces | Handled (contract is the arbiter) |
+| Two payments sent in quick succession | Distinct refs, distinct payments | Handled |
+| Attest and refund clicked on the same payment near-simultaneously | One terminal state wins; contract enforces | Handled (contract is the arbiter) |
 | Financier funds while the borrower's score is updating | Funding uses the offer at click time; consistent | Partial |
 | Multiple browser tabs for the same account | Stay consistent on refresh | Partial |
 

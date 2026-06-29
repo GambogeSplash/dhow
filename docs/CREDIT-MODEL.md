@@ -66,7 +66,7 @@ Binary knockouts. Any one fails → no offer, regardless of score:
 | Gate | Rule |
 |---|---|
 | KYB | business verification complete |
-| Settlement history | at least one arm's-length settled corridor |
+| Settlement history | at least one arm's-length settled payment |
 | Tenure | account ≥ **21 days** old (anti-flash) |
 | Independence | ≥ **2** distinct counterparties |
 | Circular flow | **no** settlement routed to an ownership-linked wallet |

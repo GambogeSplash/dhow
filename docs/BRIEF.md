@@ -35,7 +35,7 @@ The competitive map has three camps and the top-right quadrant is empty: payment
 ## The four surfaces
 
 1. **Send** — importer pays a supplier. Two modes: open settlement (pay now) or **Proof-Lock** (funds lock in escrow on Polygon, release automatically when a shipment proof is attested). The spine. Real Polygon settlement, transparent FX (AED quote), record both sides see.
-2. **Corridor Record** — the importer's verified cashflow ledger. Every settled payment lands here and lifts a **Corridor Score**. The underwriting primitive, made visible. The whole moat as one screen.
+2. **Cashflow Record** — the importer's verified cashflow ledger. Every settled payment lands here and lifts a **Credit Score**. The underwriting primitive, made visible. The whole moat as one screen.
 3. **Capital** — once the score crosses a threshold, the importer sees working-capital offers and accepts in one tap. Mirror side = financier view: a scored, de-risked borrower with a live verified cashflow feed.
 4. **Receipt** — the supplier's view of an incoming settlement and the proof that released it. Closes the loop.
 
@@ -43,11 +43,11 @@ The competitive map has three camps and the top-right quadrant is empty: payment
 
 The win is that the credit offer **visibly derives** from payments the judge just watched settle. If it appears, it's a mockup. If it derives, the flywheel is proven.
 
-- **Setup.** Al Noor Trading (Dubai importer), Corridor Score low, two prior settled corridors in the Record. Supplier: Meridian Components, Shenzhen. Goods inbound through Jebel Ali.
+- **Setup.** Al Noor Trading (Dubai importer), Credit Score low, two prior settled payments in the Record. Supplier: Meridian Components, Shenzhen. Goods inbound through Jebel Ali.
 - **0:00–0:20 Send a Proof-Lock.** AED-quoted USDC locks in escrow on Polygon (real Amoy tx). This is the conditional settlement a bank charges a fee and ten days to administer.
 - **0:20–0:35 Condition fires.** Shipment proof attested (the one honest mock: a single inspector attestation via EAS). Funds release automatically to Meridian, settled in seconds, FX shown. 7–10 days became this.
-- **0:35–0:55 Record updates, visibly.** Settlement writes to the Corridor Record; the score ticks up off the payment that just cleared. Third settled corridor crosses the threshold.
-- **0:55–1:20 Capital, from a real counterparty.** Crossing the threshold surfaces Al Noor to Creek Capital (pre-loaded financier), which extends AED 50,000 working capital against the corridor. Al Noor accepts in one tap. Capital lands. A third party funded it.
+- **0:35–0:55 Record updates, visibly.** Settlement writes to the Cashflow Record; the score ticks up off the payment that just cleared. Third settled payment crosses the threshold.
+- **0:55–1:20 Capital, from a real counterparty.** Crossing the threshold surfaces Al Noor to Creek Capital (pre-loaded financier), which extends AED 50,000 working capital against the payment. Al Noor accepts in one tap. Capital lands. A third party funded it.
 - **1:20–1:30 Close.** "Al Noor was a 41%-rejection SME this morning. It just drew working capital, because Creek Capital can see three shipments settled and verified on Dhow's rails. We don't lend. We make the unfundable legible, and we hand the financing to the room."
 
 ## Revenue
@@ -60,7 +60,7 @@ The win is that the credit offer **visibly derives** from payments the judge jus
 ## Cold-start (have this ready before a judge asks)
 
 1. **Day one Dhow underwrites nothing.** The payment product stands alone: cheaper, faster, transparent cross-border supplier settlement vs correspondent banking. Reason enough to use it before any credit exists — so the data is earned, not assumed.
-2. **Credit switches on per-SME** once an importer crosses N settled corridors.
+2. **Credit switches on per-SME** once an importer crosses N settled payments.
 3. **The financier side — normally the hard half of a two-sided market — is supplied by this contest.** DIFC's network + 289 banks are the demand side, handed to us by the prize structure. We launch the marketplace into pre-existing liquidity.
 
 ## Risk model decision: marketplace, not balance sheet (locked)
@@ -90,6 +90,6 @@ At the moment credit switches on, Dhow does **not** carry balance-sheet risk. It
 
 - **Real, non-negotiable:** the supplier payment flow end to end on Amoy. Send, FX quote, settle. The spine; never mocked.
 - **Real, scoped:** Proof-Lock escrow with a single condition. The attestation source is the one honest mock (an inspector button).
-- **Real, must be real:** the Corridor Record + score, computed off actual settlements. If the score doesn't derive from real settled payments, the demo reads as fake.
+- **Real, must be real:** the Cashflow Record + score, computed off actual settlements. If the score doesn't derive from real settled payments, the demo reads as fake.
 - **Demo-real:** one pre-loaded financier (Creek Capital) accepting an offer as a real on-screen state change.
 - **Roadmap slides, not built:** multi-financier marketplace, balance-sheet optionality, multi-condition instruments, the 289-bank network.
