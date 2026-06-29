@@ -46,7 +46,7 @@ matrix. Update the status as cases get covered.
 | Amount with decimals / commas / spaces | Parsed to a clean number; USDC computed at peg | Handled (`Number(amount.replace(...))`) |
 | Goods description empty | Send disabled | Handled (`canSend`) |
 | No supplier selected (or none exist) | Send disabled; prompt to add a supplier | Handled (`canSend`, add-supplier inline) |
-| Very large amount (overflow, USDC 6-dp precision) | No precision loss; rounds to 6 dp deterministically | Partial (`makeCorridorUsdc` rounds; add an upper bound) |
+| Very large amount (overflow, USDC 6-dp precision) | No precision loss; rounds to 6 dp deterministically | Partial (`makeUsdc` rounds; add an upper bound) |
 | Duplicate ref collision (`DHW-####`) | Refs stay unique | Handled (server increments; preview increments by count) |
 | Network drops after the user signs but before confirmation | Show pending, reconcile to confirmed/failed; do not double-send | Partial (`txState` pending/confirmed/failed exists; reconcile path to verify) |
 | User double-clicks send | One corridor, one tx | Partial (disable button while in-flight; confirm) |
@@ -111,7 +111,7 @@ matrix. Update the status as cases get covered.
 | Forged or missing access token on a write route | 401 | Handled (`getUserId` / `privyConfigured` guard) |
 | Account-id / tenant header mismatch | Reject | Partial (verify header trust end to end) |
 | Borrower deal page for an id that does not exist | "Borrower not found" fallback | Handled |
-| Public `/api/borrowers` and `/api/corridors` GET leak private data | Only chain-derived / intended-public fields exposed | Partial (audit the public read surface) |
+| Public `/api/borrowers` and `/api/payments` GET leak private data | Only chain-derived / intended-public fields exposed | Partial (audit the public read surface) |
 
 ## 9. Chain, network, RPC
 
@@ -129,7 +129,7 @@ matrix. Update the status as cases get covered.
 | Scenario | Expected | Status |
 | --- | --- | --- |
 | AED to USDC conversion | Fixed CBUAE peg 3.6725, never a live oracle | Handled (`AED_PER_USD`) |
-| USDC 6-dp rounding | Deterministic round to 6 dp, no drift between display and on-chain amount | Handled (`makeCorridorUsdc`) |
+| USDC 6-dp rounding | Deterministic round to 6 dp, no drift between display and on-chain amount | Handled (`makeUsdc`) |
 | Currency formatting (thousands, locale) | Consistent via `aed()` / `usdcLabel()`, never hand-rolled | Handled |
 | Sub-cent amounts | Round predictably; do not send dust that reverts | Partial (define a minimum) |
 | Display rounding hiding a real difference | Never round in a way that misstates the on-chain value | Handled |

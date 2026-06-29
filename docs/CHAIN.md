@@ -17,7 +17,7 @@ Run tests: `cd contracts && forge test -vv`
 
 - `lib/chain.ts` — server-only viem layer (burner signer, minimal ABIs, env config). `corridorId(ref) = keccak256(ref)`.
 - `app/api/chain/route.ts` — POST `{ action: 'pay'|'lock'|'attest', ref, amountUsdc }` → `{ mode: 'chain'|'sim', txHash, explorerUrl }`. Fail-soft: any RPC error returns a sim hash so the demo never stalls.
-- `components/CorridorProvider.tsx` — `send`/`attest` update optimistically, then patch the real tx hash + polygonscan link when the receipt lands. Open settlement = direct USDC `transfer`; Proof-Lock = `lock` then `attestRelease`.
+- `components/CreditProvider.tsx` — `send`/`attest` update optimistically, then patch the real tx hash + polygonscan link when the receipt lands. Open settlement = direct USDC `transfer`; Proof-Lock = `lock` then `attestRelease`.
 
 ## Run locally against anvil (deterministic addresses)
 

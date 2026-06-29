@@ -47,7 +47,7 @@ export function explorerUrl(hash: string): string {
   return `${EXPLORER_BASE}${hash}`;
 }
 
-export function corridorId(ref: string): Hex {
+export function paymentId(ref: string): Hex {
   return keccak256(toBytes(ref));
 }
 
@@ -97,7 +97,7 @@ const ESCROW_ABI = [
     name: "lock",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "corridorId", type: "bytes32" },
+      { name: "paymentId", type: "bytes32" },
       { name: "supplier", type: "address" },
       { name: "amount", type: "uint256" },
       { name: "deadline", type: "uint64" },
@@ -109,7 +109,7 @@ const ESCROW_ABI = [
     name: "releaseWithAttestation",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "corridorId", type: "bytes32" },
+      { name: "paymentId", type: "bytes32" },
       { name: "attestationUid", type: "bytes32" },
     ],
     outputs: [],
@@ -118,7 +118,7 @@ const ESCROW_ABI = [
     type: "function",
     name: "refund",
     stateMutability: "nonpayable",
-    inputs: [{ name: "corridorId", type: "bytes32" }],
+    inputs: [{ name: "paymentId", type: "bytes32" }],
     outputs: [],
   },
 ] as const;
@@ -178,7 +178,7 @@ export async function payOpen(
   return { txHash: hash, explorerUrl: explorerUrl(hash) };
 }
 
-/** Proof-Lock: approve the escrow (if needed) then lock funds for the corridor. */
+/** Proof-Lock: approve the escrow (if needed) then lock funds for the payment. */
 export async function lockProoflock(
   provider: EIP1193Provider,
   from: Hex,
@@ -213,7 +213,7 @@ export async function lockProoflock(
     address: escrow,
     abi: ESCROW_ABI,
     functionName: "lock",
-    args: [corridorId(ref), supplier, amount, deadline],
+    args: [paymentId(ref), supplier, amount, deadline],
     chain: dhowChain,
     account: from,
   });
@@ -222,7 +222,7 @@ export async function lockProoflock(
 }
 
 /** Release escrowed funds against a real EAS shipment-proof attestation. */
-export async function releaseCorridor(
+export async function releasePayment(
   provider: EIP1193Provider,
   from: Hex,
   ref: string,
@@ -234,7 +234,7 @@ export async function releaseCorridor(
     address: escrow,
     abi: ESCROW_ABI,
     functionName: "releaseWithAttestation",
-    args: [corridorId(ref), attestationUid],
+    args: [paymentId(ref), attestationUid],
     chain: dhowChain,
     account: from,
   });
@@ -242,8 +242,8 @@ export async function releaseCorridor(
   return { txHash: hash, explorerUrl: explorerUrl(hash) };
 }
 
-/** Refund a locked corridor back to the buyer (after the on-chain deadline). */
-export async function refundCorridor(
+/** Refund a locked payment back to the buyer (after the on-chain deadline). */
+export async function refundPayment(
   provider: EIP1193Provider,
   from: Hex,
   ref: string,
@@ -254,7 +254,7 @@ export async function refundCorridor(
     address: escrow,
     abi: ESCROW_ABI,
     functionName: "refund",
-    args: [corridorId(ref)],
+    args: [paymentId(ref)],
     chain: dhowChain,
     account: from,
   });

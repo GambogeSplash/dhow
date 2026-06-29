@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useWorkspace } from "./CorridorProvider";
+import { useWorkspace } from "./CreditProvider";
 import { useOverlays } from "./overlays";
 import { DhowMark } from "./DhowMark";
 
@@ -19,7 +19,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/overview", label: "Overview", icon: GridIcon },
   { action: "send", label: "Send payment", icon: SendIcon },
-  { href: "/corridor", label: "Cashflow Record", icon: LedgerIcon },
+  { href: "/credit", label: "Cashflow Record", icon: LedgerIcon },
   { href: "/capital", label: "Capital", icon: CoinIcon },
   { href: "/suppliers", label: "Suppliers", icon: UsersIcon },
 ];
@@ -86,7 +86,7 @@ export function Sidebar() {
       {/* score chip */}
       <div className="px-3 pb-2">
         <Link
-          href="/corridor"
+          href="/credit"
           className="flex items-center justify-between rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-2.5 transition-colors hover:border-line-strong"
         >
           <span className="text-xs text-ink-3">Credit Score</span>

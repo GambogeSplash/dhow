@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { Avatar } from "@/components/Avatar";
 import { aed, usdcLabel } from "@/lib/credit";
 import { press } from "@/lib/motion";
@@ -21,12 +21,12 @@ const REASONS = [
  * claim, not a withdrawal, with a reason on the record and a clear note that it
  * lowers proof performance.
  */
-export function RefundDisputeForm({ corridorId, onClose }: { corridorId: string; onClose: () => void }) {
-  const { corridors, refund } = useCorridor();
-  const c = corridors.find((x) => x.id === corridorId);
+export function RefundDisputeForm({ paymentId, onClose }: { paymentId: string; onClose: () => void }) {
+  const { payments, refund } = useCredit();
+  const c = payments.find((x) => x.id === paymentId);
   const [reason, setReason] = useState(REASONS[0]);
 
-  if (!c) return <div className="p-6 text-sm text-ink-3">This corridor is no longer open.</div>;
+  if (!c) return <div className="p-6 text-sm text-ink-3">This payment is no longer open.</div>;
 
   return (
     <div className="p-6">
@@ -64,7 +64,7 @@ export function RefundDisputeForm({ corridorId, onClose }: { corridorId: string;
       <p className="mt-4 rounded-[var(--radius-card)] bg-surface-sunk px-4 py-3 text-sm text-ink-2">
         The escrow returns {aed(c.amountAed)} to you because the shipment proof was not attested. On
         chain this is gated on the Proof-Lock deadline, so the funds can only be reclaimed once it
-        passes. It marks {c.ref} refunded and lowers your proof performance, since the corridor
+        passes. It marks {c.ref} refunded and lowers your proof performance, since the payment
         resolved without a clean release.
       </p>
 
@@ -75,7 +75,7 @@ export function RefundDisputeForm({ corridorId, onClose }: { corridorId: string;
         <motion.button
           {...press}
           onClick={() => {
-            refund(corridorId);
+            refund(paymentId);
             onClose();
           }}
           className="rounded-full border border-danger/40 bg-danger-tint px-5 py-2.5 text-sm font-medium text-danger transition-colors hover:bg-danger-tint/70"

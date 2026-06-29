@@ -19,8 +19,8 @@ import { RequestCapitalForm } from "@/components/RequestCapitalForm";
 interface Overlays {
   openSend: (supplierId?: string) => void;
   openAddSupplier: () => void;
-  openAttest: (corridorId: string) => void;
-  openRefund: (corridorId: string) => void;
+  openAttest: (paymentId: string) => void;
+  openRefund: (paymentId: string) => void;
   openAccept: (dealId: string) => void;
   openRequestCapital: () => void;
   close: () => void;
@@ -38,8 +38,8 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
 
   const openSend = useCallback((supplierId?: string) => setSend({ open: true, supplierId }), []);
   const openAddSupplier = useCallback(() => setAddSupplier(true), []);
-  const openAttest = useCallback((corridorId: string) => setAttestId(corridorId), []);
-  const openRefund = useCallback((corridorId: string) => setRefundId(corridorId), []);
+  const openAttest = useCallback((paymentId: string) => setAttestId(paymentId), []);
+  const openRefund = useCallback((paymentId: string) => setRefundId(paymentId), []);
   const openAccept = useCallback((dealId: string) => setAcceptId(dealId), []);
   const openRequestCapital = useCallback(() => setRequestCapital(true), []);
   const close = useCallback(() => {
@@ -66,11 +66,11 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
       </Modal>
 
       <Modal open={!!attestId} onClose={() => setAttestId(null)} title="Release against shipment proof">
-        {attestId && <AttestProofForm corridorId={attestId} onClose={() => setAttestId(null)} />}
+        {attestId && <AttestProofForm paymentId={attestId} onClose={() => setAttestId(null)} />}
       </Modal>
 
       <Modal open={!!refundId} onClose={() => setRefundId(null)} title="Dispute & refund">
-        {refundId && <RefundDisputeForm corridorId={refundId} onClose={() => setRefundId(null)} />}
+        {refundId && <RefundDisputeForm paymentId={refundId} onClose={() => setRefundId(null)} />}
       </Modal>
 
       <Modal open={!!acceptId} onClose={() => setAcceptId(null)} title="Accept this offer">

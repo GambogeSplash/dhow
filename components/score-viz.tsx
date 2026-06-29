@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatedNumber } from "@/components/AnimatedNumber";
-import { CorridorScore, ELIGIBLE_THRESHOLD, ScoreFactor, aed } from "@/lib/credit";
+import { CreditScore, ELIGIBLE_THRESHOLD, ScoreFactor, aed } from "@/lib/credit";
 import type { AdvanceHealth, Grade, HealthBand } from "@/lib/credit";
 
 /** The v2 credit grade as a coloured chip — one component, used by the importer
@@ -25,7 +25,7 @@ export function GradeBadge({ grade, size = 36 }: { grade: Grade; size?: number }
 }
 
 /*
- * Shared Credit Score visualisation, used by both the importer's Corridor
+ * Shared Credit Score visualisation, used by both the importer's Payment
  * Record and the financier's deal view so the two personas read the same
  * number in the same visual language.
  */
@@ -124,7 +124,7 @@ export function ScoreCard({
   prevScore,
   verifiedOnChain,
 }: {
-  score: CorridorScore;
+  score: CreditScore;
   prevScore?: number;
   verifiedOnChain?: boolean;
 }) {

@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
-import { aed, Corridor, ELIGIBLE_THRESHOLD, usdcLabel } from "@/lib/credit";
+import { aed, Payment, ELIGIBLE_THRESHOLD, usdcLabel } from "@/lib/credit";
 import { statusLabel, ACTIVE_STATUSES } from "@/lib/deal";
 import { stagger, riseItem } from "@/lib/motion";
 
 export default function OverviewPage() {
-  const { business, corridors, score, offerAed, activeDeal } = useCorridor();
+  const { business, payments, score, offerAed, activeDeal } = useCredit();
   const { openSend } = useOverlays();
 
-  const inFlight = corridors.filter((c) => c.status === "locked").length;
+  const inFlight = payments.filter((c) => c.status === "locked").length;
 
   // Capital metric reflects a live deal if there is one, else the indicative offer.
   const capital = activeDeal
@@ -27,7 +27,7 @@ export default function OverviewPage() {
         foot: score.eligible ? "request now" : `unlocks at score ${ELIGIBLE_THRESHOLD}`,
         tone: score.eligible ? ("brass" as const) : ("ink" as const),
       };
-  const recent = [...corridors]
+  const recent = [...payments]
     .sort((a, b) => (b.settledAt ?? b.createdAt) - (a.settledAt ?? a.createdAt))
     .slice(0, 5);
 
@@ -78,7 +78,7 @@ export default function OverviewPage() {
       <div className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-medium text-ink-2">Recent activity</h2>
-          <Link href="/corridor" className="text-sm text-teal-deep hover:underline">
+          <Link href="/credit" className="text-sm text-teal-deep hover:underline">
             View Cashflow Record →
           </Link>
         </div>
@@ -150,7 +150,7 @@ function Metric({
   );
 }
 
-function ActivityRow({ c, first }: { c: Corridor; first: boolean }) {
+function ActivityRow({ c, first }: { c: Payment; first: boolean }) {
   return (
     <div
       className={`flex items-center justify-between gap-4 px-5 py-3.5 ${
@@ -175,7 +175,7 @@ function ActivityRow({ c, first }: { c: Corridor; first: boolean }) {
   );
 }
 
-function StatusPill({ c }: { c: Corridor }) {
+function StatusPill({ c }: { c: Payment }) {
   if (c.txState === "failed")
     return (
       <span className="rounded-full bg-danger-tint px-2 py-0.5 text-[11px] font-medium text-danger">

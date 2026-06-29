@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { assessCredit, advanceHealth, type CreditInput, type Receivable } from "./credit";
-import type { Corridor, Counterparty } from "./credit";
+import type { Payment, Counterparty } from "./credit";
 
 const DAY = 86_400_000;
 const NOW = 1_700_000_000_000;
@@ -9,7 +9,7 @@ function cp(id: string): Counterparty {
   return { id, name: id, city: "Dubai", country: "AE" };
 }
 
-function settled(id: string, supplier: string, amountAed: number, daysAgo: number): Corridor {
+function settled(id: string, supplier: string, amountAed: number, daysAgo: number): Payment {
   return {
     id,
     ref: `DHW-${id}`,
@@ -26,10 +26,10 @@ function settled(id: string, supplier: string, amountAed: number, daysAgo: numbe
   };
 }
 
-function base(corridors: Corridor[], extra: Partial<CreditInput> = {}): CreditInput {
+function base(payments: Payment[], extra: Partial<CreditInput> = {}): CreditInput {
   return {
     profile: { kybVerified: true, onboardedAt: NOW - 120 * DAY },
-    corridors,
+    payments,
     now: NOW,
     ...extra,
   };
@@ -110,7 +110,7 @@ describe("assessCredit — grade + capacity", () => {
   });
 
   it("refunds drop performance and the grade", () => {
-    const withRefund: Corridor[] = [
+    const withRefund: Payment[] = [
       ...healthy,
       { ...settled("5", "sup-b", 100_000, 20), status: "refunded", proof: { status: "failed", label: "x" } },
     ];

@@ -5,12 +5,12 @@
  * and client render identically (no hydration drift). Local/demo only.
  */
 import {
-  type Corridor,
+  type Payment,
   type Counterparty,
   type SettlementMode,
   type SettlementStatus,
   type ProofStatus,
-  makeCorridorUsdc,
+  makeUsdc,
 } from "./credit";
 import type { Business, Supplier } from "./account";
 import type { Receivable } from "./credit";
@@ -70,7 +70,7 @@ export const seedSuppliers: Supplier[] = [
 
 const SUP = Object.fromEntries(seedSuppliers.map((s) => [s.id, s])) as Record<string, Counterparty>;
 
-// ---- corridor builder ----
+// ---- payment builder ----
 
 interface Spec {
   ref: string;
@@ -83,7 +83,7 @@ interface Spec {
   proof?: { status: ProofStatus; label: string; attestedBy?: string };
 }
 
-function build(spec: Spec): Corridor {
+function build(spec: Spec): Payment {
   const settled = spec.status === "settled";
   const at = SEED_NOW - spec.daysAgo * DAY;
   const onChain = spec.status !== "draft";
@@ -94,7 +94,7 @@ function build(spec: Spec): Corridor {
     supplier: SUP[spec.supplierId],
     goods: spec.goods,
     amountAed: spec.amountAed,
-    amountUsdc: makeCorridorUsdc(spec.amountAed),
+    amountUsdc: makeUsdc(spec.amountAed),
     mode: spec.mode,
     status: spec.status,
     proof: spec.proof,
@@ -106,11 +106,11 @@ function build(spec: Spec): Corridor {
   };
 }
 
-function corridors(specs: Spec[]): Corridor[] {
+function payments(specs: Spec[]): Payment[] {
   return specs.map(build);
 }
 
-// ---- the signed-in importer's own corridors (rich, eligible) ----
+// ---- the signed-in importer's own payments (rich, eligible) ----
 
 export const seedBusiness: Business = {
   id: "al-noor-trading",
@@ -134,7 +134,7 @@ export const seedReceivables: Receivable[] = [
   },
 ];
 
-export const seedCorridors: Corridor[] = corridors([
+export const seedPayments: Payment[] = payments([
   {
     ref: "DHW-0419",
     supplierId: "sup_gulfsteel",
@@ -219,12 +219,12 @@ export const seedCorridors: Corridor[] = corridors([
 
 export interface SeedBorrower {
   business: Business;
-  corridors: Corridor[];
+  payments: Payment[];
 }
 
 export const seedBorrowers: SeedBorrower[] = [
   // The signed-in importer, surfaced as an eligible borrower.
-  { business: seedBusiness, corridors: seedCorridors },
+  { business: seedBusiness, payments: seedPayments },
   // A second eligible borrower.
   {
     business: {
@@ -236,7 +236,7 @@ export const seedBorrowers: SeedBorrower[] = [
       walletAddress: wallet("zarah"),
       createdAt: SEED_NOW - 90 * DAY,
     },
-    corridors: corridors([
+    payments: payments([
       { ref: "ZRH-0220", supplierId: "sup_alfaris", goods: "Linen bolts", amountAed: 190_000, mode: "prooflock", status: "settled", daysAgo: 5, proof: { status: "attested", label: "Bill of lading", attestedBy: "Gulf Inspectorate" } },
       { ref: "ZRH-0219", supplierId: "sup_alfaris", goods: "Cotton roll", amountAed: 140_000, mode: "open", status: "settled", daysAgo: 18 },
       { ref: "ZRH-0218", supplierId: "sup_meridian", goods: "Trim hardware", amountAed: 120_000, mode: "prooflock", status: "settled", daysAgo: 30, proof: { status: "attested", label: "Inspection cert", attestedBy: "Gulf Inspectorate" } },
@@ -254,7 +254,7 @@ export const seedBorrowers: SeedBorrower[] = [
       walletAddress: wallet("crescent"),
       createdAt: SEED_NOW - 40 * DAY,
     },
-    corridors: corridors([
+    payments: payments([
       { ref: "CRS-0107", supplierId: "sup_gulfsteel", goods: "Canning line spares", amountAed: 95_000, mode: "open", status: "settled", daysAgo: 7 },
       { ref: "CRS-0106", supplierId: "sup_meridian", goods: "Label printers", amountAed: 60_000, mode: "prooflock", status: "settled", daysAgo: 26, proof: { status: "attested", label: "Bill of lading", attestedBy: "Gulf Inspectorate" } },
     ]),
@@ -333,7 +333,7 @@ const bidCreek = seedBid({
   financierId: "fin_creek",
   financierName: "Creek Capital",
   terms: { amountAed: 36_000, ratePct: 1.5, tenorDays: 30 },
-  note: "Sized to your average corridor. Happy to revisit on a clean release.",
+  note: "Sized to your average payment. Happy to revisit on a clean release.",
   offeredAt: SEED_NOW - 1 * DAY,
 });
 const bidDunes = seedBid({
@@ -363,7 +363,7 @@ export const seedImporterFunded: Deal = {
   status: "funded",
   turn: "borrower",
   terms: { amountAed: 30_000, ratePct: 1.5, tenorDays: 30 },
-  purpose: "Earlier steel corridor.",
+  purpose: "Earlier steel payment.",
   financierWallet: wallet("creek-capital"),
   fundedAt: SEED_NOW - 12 * DAY,
   txHash: fakeHash("facility-alnoor"),

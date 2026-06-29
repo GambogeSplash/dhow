@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useAccount } from "@/components/CorridorProvider";
+import { useAccount } from "@/components/CreditProvider";
 import { Avatar } from "@/components/Avatar";
 import { DhowMark } from "@/components/DhowMark";
 import { sanitizeBusiness, sanitizeSupplier, NAME_MAX, PLACE_MAX } from "@/lib/validate";

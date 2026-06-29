@@ -95,7 +95,7 @@ export default function Home() {
             kicker="For financiers"
             title="Underwrite cashflow you can verify"
             points={[
-              "See a borrower's settled corridors live, on-chain.",
+              "See a borrower's settled payments live, on-chain.",
               "Make and counter offers; set your rate and tenor.",
               "Fund from your own wallet, in one signed transfer.",
               "The score moves with the money, so repayment stays in view.",

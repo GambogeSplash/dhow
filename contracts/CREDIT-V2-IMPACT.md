@@ -7,7 +7,7 @@ contract change is required to merge v2** — this is the roadmap, not a blocker
 
 ## What changed off-chain
 
-v1 (the `scoreCorridors` function, now in `lib/credit.ts`, mirrored on-chain in
+v1 (the `creditScore` function, now in `lib/credit.ts`, mirrored on-chain in
 `DhowScoreRegistry._score`) is a single 0–100 reputation number from settlement
 facts:
 `history(30) + volume(25) + performance(30) + cadence(15)`.

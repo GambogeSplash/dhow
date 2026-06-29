@@ -55,7 +55,7 @@ export function DealReview({ borrowerId, onClose }: { borrowerId: string; onClos
     );
   }
 
-  const settled = borrower.corridors.filter((c) => c.status === "settled");
+  const settled = borrower.payments.filter((c) => c.status === "settled");
   const perms = deal ? permissions(deal, "financier") : null;
 
   async function run(fn: () => Promise<void>, closeAfter?: boolean) {
@@ -127,12 +127,12 @@ export function DealReview({ borrowerId, onClose }: { borrowerId: string; onClos
               <p className="text-xs uppercase tracking-wide text-ink-faint">Make an offer</p>
               <p className="mt-1 text-sm text-ink-3">
                 Propose working-capital terms to {borrower.name}, sized to their{" "}
-                {aed(borrower.score.avgCorridorAed)} average corridor. They can accept or counter.
+                {aed(borrower.score.avgPaymentAed)} average payment. They can accept or counter.
               </p>
               <div className="mt-4 border-t border-line pt-4">
                 <TermsEditor
                   initial={{
-                    amountAed: borrower.offerAed || Math.round(borrower.score.avgCorridorAed * 0.3) || 10_000,
+                    amountAed: borrower.offerAed || Math.round(borrower.score.avgPaymentAed * 0.3) || 10_000,
                     ratePct: DEFAULT_RATE_PCT,
                     tenorDays: DEFAULT_TENOR_DAYS,
                   }}

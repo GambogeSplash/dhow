@@ -91,7 +91,7 @@ operator chain spine.
 | `lib/indexer.ts` | Reads escrow events so the financier derives a borrower's corridors from chain state, cross-machine. |
 | `app/api/account` | GET/POST the authenticated business profile + wallet. |
 | `app/api/suppliers` | POST add a supplier. |
-| `app/api/corridors` | GET (public chain-derived feed by payer) · POST (create after user signs) · PATCH (lifecycle). |
+| `app/api/payments` | GET (public chain-derived feed by payer) · POST (create after user signs) · PATCH (lifecycle). |
 | `app/api/attest` | POST: operator creates the EAS shipment-proof attestation. |
 | `app/api/score` | POST: post score on-chain · GET: read `scoreOf` / eligibility. |
 | `app/api/borrowers` | GET: scored borrower feed for the financier. |
@@ -99,7 +99,7 @@ operator chain spine.
 | `app/api/faucet` | POST: operator sponsors a new user's wallet with POL + test USDC. |
 
 **First hour:** read `lib/store-server.ts` (the data model in code) alongside
-`db/schema.sql`, then `app/api/corridors/route.ts` — it shows the full pattern:
+`db/schema.sql`, then `app/api/payments/route.ts` — it shows the full pattern:
 Privy guard → DB write → chain-derived read. Note the env-gating: with no DB or
 Privy config the routes degrade gracefully rather than crash.
 
@@ -119,14 +119,14 @@ and the design language.
 | `app/onboarding/` | Sign in (Privy) → business → supplier → wallet. |
 | `app/(app)/{overview,send,corridor,capital,suppliers}` | Importer surfaces. |
 | `app/(financier)/{desk,opportunities,deal/[business],portfolio}` | Financier surfaces. |
-| `components/CorridorProvider.tsx` | Importer client store: `useCorridor` / `useAccount` / `useWorkspace`. Privy auth + DB persistence + user-signed writes. `attest()` runs the full attest → release → post-score chain. |
+| `components/CreditProvider.tsx` | Importer client store: `useCredit` / `useAccount` / `useWorkspace`. Privy auth + DB persistence + user-signed writes. `attest()` runs the full attest → release → post-score chain. |
 | `components/FinancierProvider.tsx` | Financier store: borrowers from `/api/borrowers` + on-chain score overlay; funds via a real signed USDC transfer. |
 | `components/Providers.tsx` | Privy + wagmi + react-query, scoped to app+onboarding so the public landing stays provider-free. |
 | `components/{score-viz,AnimatedNumber,Sidebar,AppShell,FaucetCard,DhowMark,LandingCta}.tsx` | Shared UI. `score-viz` (`ScoreCard`/`FactorRow`/`TierPill`) renders the same number both personas read. |
 | `app/globals.css` | Design tokens: chart-paper `#faf8f3`, indigo ink `#11202e`, verdigris teal `#0c7c66` (trust), brass `#b07d28` (value moments). Spectral display + Geist + Geist Mono, tabular figures. No dark mode. |
 
 **First hour:** run it (below), click the full flywheel, then read
-`CorridorProvider.tsx` — it's where UI state, the scoring engine, and the
+`CreditProvider.tsx` — it's where UI state, the scoring engine, and the
 user-signed chain calls meet.
 
 **Copy rules (enforced):** no em dashes or dash-joined clauses in user-facing

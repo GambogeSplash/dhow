@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import type { Hex } from "viem";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { Avatar } from "@/components/Avatar";
 import { FaucetCard } from "@/components/FaucetCard";
 import { ChainBadge } from "@/components/ChainBadge";
-import { AED_PER_USD, makeCorridorUsdc, SettlementMode, usdcLabel } from "@/lib/credit";
+import { AED_PER_USD, makeUsdc, SettlementMode, usdcLabel } from "@/lib/credit";
 import { press } from "@/lib/motion";
 import { chainConfigured, readBalances } from "@/lib/chain-client";
 import { cleanText, sanitizeSupplier, GOODS_MAX, NAME_MAX, PLACE_MAX } from "@/lib/validate";
@@ -16,7 +16,7 @@ import { cleanText, sanitizeSupplier, GOODS_MAX, NAME_MAX, PLACE_MAX } from "@/l
 /*
  * The payment composer, extracted so it can live in a modal (the default in-app
  * path) and still back a full-page deep link. `onClose` fires after a send or a
- * cancel; the corridor is created on the provider and the user lands on the
+ * cancel; the payment is created on the provider and the user lands on the
  * Cashflow Record.
  */
 export function SendPaymentForm({
@@ -27,7 +27,7 @@ export function SendPaymentForm({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { business, suppliers, addSupplier, sendPayment, walletAddress } = useCorridor();
+  const { business, suppliers, addSupplier, sendPayment, walletAddress } = useCredit();
 
   const [supplierId, setSupplierId] = useState(initialSupplierId ?? suppliers[0]?.id ?? "");
   const [goods, setGoods] = useState("");
@@ -59,7 +59,7 @@ export function SendPaymentForm({
   }, [refreshBalance]);
 
   const amountAed = Number(amount.replace(/[^0-9.]/g, "")) || 0;
-  const amountUsdc = amountAed > 0 ? makeCorridorUsdc(amountAed) : 0;
+  const amountUsdc = amountAed > 0 ? makeUsdc(amountAed) : 0;
   const goodsOver = goods.trim().length > GOODS_MAX;
   const overBalance = usdcBalance !== null && amountUsdc > usdcBalance;
   const canSend = !!supplierId && amountAed > 0 && goods.trim().length > 0 && !goodsOver && !overBalance;
@@ -85,7 +85,7 @@ export function SendPaymentForm({
     const c = sendPayment({ supplierId, goods: cleanText(goods, GOODS_MAX), amountAed, mode });
     if (c) {
       onClose();
-      router.push("/corridor");
+      router.push("/credit");
     }
   }
 

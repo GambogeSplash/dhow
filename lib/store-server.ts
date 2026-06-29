@@ -1,8 +1,8 @@
 import "server-only";
 import { db } from "./db";
 import type { Business, Supplier, AccountRecord } from "./account";
-import type { Corridor, SettlementMode, SettlementStatus, ProofStatus, TxState } from "./credit";
-import { makeCorridorUsdc } from "./credit";
+import type { Payment, SettlementMode, SettlementStatus, ProofStatus, TxState } from "./credit";
+import { makeUsdc } from "./credit";
 import type { Receivable } from "./credit";
 import type { Deal, DealEvent } from "./deal";
 
@@ -34,7 +34,7 @@ type SupplierRow = {
   created_at: string | number;
 };
 
-type CorridorRow = {
+type PaymentRow = {
   id: string;
   ref: string;
   supplier_id: string;
@@ -90,7 +90,7 @@ function toSupplier(r: SupplierRow): Supplier {
   };
 }
 
-function toCorridor(r: CorridorRow, suppliers: Supplier[]): Corridor {
+function toPayment(r: PaymentRow, suppliers: Supplier[]): Payment {
   const supplier =
     suppliers.find((s) => s.id === r.supplier_id) ??
     ({ id: r.supplier_id, name: "Unknown supplier", city: "", country: "" } as Supplier);
@@ -149,13 +149,13 @@ export async function getAccount(businessId: string): Promise<AccountRecord | nu
   const suppliers = supRows.map(toSupplier);
 
   const corRows = (await sql`
-    SELECT * FROM corridors WHERE business_id = ${businessId} ORDER BY created_at ASC
-  `) as CorridorRow[];
-  const corridors = corRows.map((c) => toCorridor(c, suppliers));
+    SELECT * FROM payments WHERE business_id = ${businessId} ORDER BY created_at ASC
+  `) as PaymentRow[];
+  const payments = corRows.map((c) => toPayment(c, suppliers));
 
   const receivables = await listReceivables(businessId);
 
-  return { business, suppliers, corridors, receivables, offerAccepted: rows[0].offer_accepted };
+  return { business, suppliers, payments, receivables, offerAccepted: rows[0].offer_accepted };
 }
 
 // ---- receivables ----
@@ -251,19 +251,19 @@ export async function setOfferAccepted(businessId: string, accepted: boolean): P
 }
 
 /**
- * Borrowers for the financier desk: every onboarded business with its corridors.
- * The financier overlays the on-chain verified score; we return the raw corridor
+ * Borrowers for the financier desk: every onboarded business with its payments.
+ * The financier overlays the on-chain verified score; we return the raw payment
  * history so the score can be derived and shown the same way the importer sees it.
  */
 export async function listBorrowers(): Promise<
-  Array<{ business: Business; corridors: Corridor[] }>
+  Array<{ business: Business; payments: Payment[] }>
 > {
   const sql = db();
   const bizRows = (await sql`
     SELECT * FROM businesses WHERE name <> '' ORDER BY created_at ASC
   `) as BusinessRow[];
 
-  const out: Array<{ business: Business; corridors: Corridor[] }> = [];
+  const out: Array<{ business: Business; payments: Payment[] }> = [];
   for (const row of bizRows) {
     const business = toBusiness(row);
     const supRows = (await sql`
@@ -271,9 +271,9 @@ export async function listBorrowers(): Promise<
     `) as SupplierRow[];
     const suppliers = supRows.map(toSupplier);
     const corRows = (await sql`
-      SELECT * FROM corridors WHERE business_id = ${business.id} ORDER BY created_at ASC
-    `) as CorridorRow[];
-    out.push({ business, corridors: corRows.map((c) => toCorridor(c, suppliers)) });
+      SELECT * FROM payments WHERE business_id = ${business.id} ORDER BY created_at ASC
+    `) as PaymentRow[];
+    out.push({ business, payments: corRows.map((c) => toPayment(c, suppliers)) });
   }
   return out;
 }
@@ -581,9 +581,9 @@ export async function addSupplier(
   return { id, name: s.name, city: s.city, country: s.country, walletAddress: s.walletAddress };
 }
 
-// ---- corridors ----
+// ---- payments ----
 
-export async function createCorridor(
+export async function createPayment(
   businessId: string,
   c: {
     id: string;
@@ -602,10 +602,10 @@ export async function createCorridor(
   },
 ): Promise<void> {
   const sql = db();
-  const amountUsdc = makeCorridorUsdc(c.amountAed);
+  const amountUsdc = makeUsdc(c.amountAed);
   const proofStatus = c.mode === "prooflock" ? "awaiting" : null;
   await sql`
-    INSERT INTO corridors (
+    INSERT INTO payments (
       id, business_id, ref, supplier_id, goods, amount_aed, amount_usdc, mode, status,
       proof_status, proof_label, created_at, settled_at, tx_hash, explorer_url, tx_state
     ) VALUES (
@@ -616,7 +616,7 @@ export async function createCorridor(
   `;
 }
 
-export interface CorridorPatch {
+export interface PaymentPatch {
   status?: SettlementStatus;
   settledAt?: number | null;
   txHash?: string | null;
@@ -631,19 +631,19 @@ export interface CorridorPatch {
  * explicit null to clear, e.g. resetting txHash on retry); an absent key is
  * left untouched. Scoped to the owning business.
  */
-export async function updateCorridor(
+export async function updatePayment(
   businessId: string,
   id: string,
-  fields: CorridorPatch,
+  fields: PaymentPatch,
 ): Promise<void> {
   const sql = db();
   const rows = (await sql`
-    SELECT * FROM corridors WHERE id = ${id} AND business_id = ${businessId}
-  `) as CorridorRow[];
+    SELECT * FROM payments WHERE id = ${id} AND business_id = ${businessId}
+  `) as PaymentRow[];
   if (!rows.length) return;
   const r = rows[0];
 
-  const pick = <T>(key: keyof CorridorPatch, current: T): T =>
+  const pick = <T>(key: keyof PaymentPatch, current: T): T =>
     key in fields ? ((fields[key] as unknown) as T) : current;
 
   const status = pick("status", r.status);
@@ -655,7 +655,7 @@ export async function updateCorridor(
   const proofAttestedBy = pick<string | null>("proofAttestedBy", r.proof_attested_by);
 
   await sql`
-    UPDATE corridors SET
+    UPDATE payments SET
       status = ${status},
       settled_at = ${settledAt},
       tx_hash = ${txHash},

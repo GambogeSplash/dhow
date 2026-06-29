@@ -3,13 +3,13 @@
  * ----------------------------
  * Identity comes from Privy (a verified DID + a non-custodial embedded wallet);
  * persistence is server-authoritative in Neon Postgres. This module is the thin
- * typed client over the /api/account, /api/suppliers and /api/corridors routes.
+ * typed client over the /api/account, /api/suppliers and /api/payments routes.
  * Every call carries the caller's Privy access token, which the server verifies
  * before touching any row — the client is never trusted to assert identity.
  */
 
 import type {
-  Corridor,
+  Payment,
   Counterparty,
   SettlementMode,
   SettlementStatus,
@@ -35,12 +35,12 @@ export type Supplier = Counterparty;
 export interface AccountRecord {
   business: Business;
   suppliers: Supplier[];
-  corridors: Corridor[];
+  payments: Payment[];
   receivables: Receivable[];
   offerAccepted: boolean;
 }
 
-export interface CorridorPatch {
+export interface PaymentPatch {
   status?: SettlementStatus;
   settledAt?: number | null;
   txHash?: string | null;
@@ -125,9 +125,9 @@ export async function apiAddSupplier(
   return supplier;
 }
 
-// ---- corridors ----
+// ---- payments ----
 
-export async function apiCreateCorridor(
+export async function apiCreatePayment(
   token: string,
   input: {
     id: string;
@@ -145,11 +145,11 @@ export async function apiCreateCorridor(
     createdAt: number;
   },
 ): Promise<void> {
-  await call(token, "/api/corridors", { method: "POST", body: input });
+  await call(token, "/api/payments", { method: "POST", body: input });
 }
 
-export async function apiPatchCorridor(token: string, id: string, patch: CorridorPatch): Promise<void> {
-  await call(token, "/api/corridors", { method: "PATCH", body: { id, patch } });
+export async function apiPatchPayment(token: string, id: string, patch: PaymentPatch): Promise<void> {
+  await call(token, "/api/payments", { method: "PATCH", body: { id, patch } });
 }
 
 // ---- receivables ----

@@ -6,9 +6,9 @@ import type { EIP1193Provider, Hex } from "viem";
 import {
   advanceOffer,
   AED_PER_USD,
-  Corridor,
-  CorridorScore,
-  scoreCorridors,
+  Payment,
+  CreditScore,
+  creditScore,
 } from "@/lib/credit";
 import type { Business } from "@/lib/account";
 import { assessCredit, type CreditAssessment } from "@/lib/credit";
@@ -54,8 +54,8 @@ export interface Borrower {
   city: string;
   country: string;
   wallet?: string;
-  corridors: Corridor[];
-  score: CorridorScore;
+  payments: Payment[];
+  score: CreditScore;
   credit: CreditAssessment;
   offerAed: number;
   onchainScore: number | null;
@@ -113,14 +113,14 @@ function deployedFromDeals(deals: Deal[]): number {
 
 function toBorrower(
   business: Business,
-  corridors: Corridor[],
+  payments: Payment[],
   now: number,
   onchainScore: number | null,
 ): Borrower {
-  const score = scoreCorridors(corridors, now);
+  const score = creditScore(payments, now);
   const credit = assessCredit({
     profile: { kybVerified: true, onboardedAt: business.createdAt },
-    corridors,
+    payments,
     now,
   });
   return {
@@ -129,7 +129,7 @@ function toBorrower(
     city: business.city,
     country: business.country,
     wallet: business.walletAddress,
-    corridors,
+    payments,
     score,
     credit,
     offerAed: advanceOffer(score),
@@ -160,7 +160,7 @@ export function FinancierProvider({ children }: { children: React.ReactNode }) {
  *  nothing is signed or persisted. */
 function FinancierPreview({ children }: { children: React.ReactNode }) {
   const borrowers = seedBorrowers.map((r) =>
-    toBorrower(r.business, r.corridors, SEED_NOW, scoreCorridors(r.corridors, SEED_NOW).score),
+    toBorrower(r.business, r.payments, SEED_NOW, creditScore(r.payments, SEED_NOW).score),
   );
   const [facilities, setFacilities] = useState<Facility[]>([seedFacility]);
   const [deals, setDeals] = useState<Deal[]>(() =>
@@ -387,7 +387,7 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(() => {
     void (async () => {
       const now = Date.now();
-      let records: Array<{ business: Business; corridors: Corridor[] }> = [];
+      let records: Array<{ business: Business; payments: Payment[] }> = [];
       try {
         const res = await fetch("/api/borrowers");
         const data = await res.json();
@@ -395,7 +395,7 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
       } catch {
         return;
       }
-      const base = records.map((r) => toBorrower(r.business, r.corridors, now, null));
+      const base = records.map((r) => toBorrower(r.business, r.payments, now, null));
       setBorrowers(base);
 
       base.forEach(async (b, i) => {
@@ -563,7 +563,7 @@ function FinancierLive({ children }: { children: React.ReactNode }) {
 
   const viewBorrowers = sampleMode
     ? seedBorrowers.map((r) =>
-        toBorrower(r.business, r.corridors, SEED_NOW, scoreCorridors(r.corridors, SEED_NOW).score),
+        toBorrower(r.business, r.payments, SEED_NOW, creditScore(r.payments, SEED_NOW).score),
       )
     : borrowers;
   const viewDeals = sampleMode ? seedFinancierDeals.filter((d) => d.financierId) : deals;

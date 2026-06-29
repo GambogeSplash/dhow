@@ -6,7 +6,7 @@ How Dhow fits together, for someone about to work on it. Read [`EXPLAINER.md`](E
 
 ```
  IMPORTER (app/(app))                          FINANCIER (app/(financier))
- CorridorProvider                              FinancierProvider
+ CreditProvider                              FinancierProvider
       │  pay / lock / release / refund               │  reads scored borrowers
       │  (USER signs, lib/chain-client)              ▼  funds eligible ones
       ▼                                                 (FINANCIER signs)
@@ -32,7 +32,7 @@ The chain is the shared source of truth. The financier reads the same chain a ju
 
 ## The flywheel, as transactions
 
-1. **Lock** — the importer signs a Proof-Lock from their own Privy embedded wallet. `DhowEscrow.lock` pulls USDC into escrow. (`lib/chain-client.ts` `lockProoflock`; the corridor persists via `/api/corridors`.)
+1. **Lock** — the importer signs a Proof-Lock from their own Privy embedded wallet. `DhowEscrow.lock` pulls USDC into escrow. (`lib/chain-client.ts` `lockProoflock`; the corridor persists via `/api/payments`.)
 2. **Attest** — the trusted inspector signs an EAS shipment-proof attestation (schema: `corridorId, ref, docType, portOfEntry, inspectedAt, supplier`). Returns a uid. (`/api/attest` → `lib/eas.ts`, operator-signed.)
 3. **Release** — `DhowEscrow.releaseWithAttestation(corridorId, uid)` verifies the attestation (schema, not revoked, not expired, attester is the inspector, corridorId matches to block replay) and releases to the supplier. Permissionless: the attestation is the authorisation. (user-signed, `lib/chain-client.ts` `releaseCorridor`.)
 4. **Score** — in the *same release transaction*, the escrow calls `DhowScoreRegistry.recordSettlement`, appending the settlement fact on-chain. The score is recomputed live from those facts on every read. There is no separate score-post step, no privileged poster, and no off-chain server in the trust path — if Dhow's backend is down, the score still moves with the money. (`refund` records the failed-proof fact the same way.)
@@ -43,7 +43,7 @@ Settlement, release and the score update are one atomic on-chain transaction the
 ## Layers
 
 ### Scoring engine — `lib/credit.ts`
-Pure and chain-agnostic, and the single most important piece of shared logic. `scoreCorridors(corridors, now)` returns the Corridor Score as a transparent function of four factors: history (≤30), volume (≤25), proof performance (≤30), cadence (≤15). `ELIGIBLE_THRESHOLD = 70`. `advanceOffer(score)` sizes the working-capital offer. Imported on the client for the optimistic UI; the *canonical* score is the one computed on-chain by `DhowScoreRegistry._score`, which mirrors this same four-factor formula. Keep the two in lockstep — both sides must agree.
+Pure and chain-agnostic, and the single most important piece of shared logic. `creditScore(corridors, now)` returns the Corridor Score as a transparent function of four factors: history (≤30), volume (≤25), proof performance (≤30), cadence (≤15). `ELIGIBLE_THRESHOLD = 70`. `advanceOffer(score)` sizes the working-capital offer. Imported on the client for the optimistic UI; the *canonical* score is the one computed on-chain by `DhowScoreRegistry._score`, which mirrors this same four-factor formula. Keep the two in lockstep — both sides must agree.
 
 ### Contracts — `contracts/src`
 - **`DhowEscrow.sol`** — the Proof-Lock. `lock` / `releaseWithAttestation` / `releaseByInspector` (owner-gated fallback when `requireEas` is off) / `refund` (after deadline). Events `Locked` / `Released(…, bytes32 attestationUid)` / `Refunded`. `corridorId = keccak256(ref)` is the universal key.
@@ -64,7 +64,7 @@ The user signs their own settlement (`payOpen` / `lockProoflock` / `releaseCorri
 - **`lib/privy-server.ts`** — verifies the Privy access token (`getUserId`); every mutating route gates on it.
 
 ### Stores — client
-- **`CorridorProvider`** (`useCorridor`/`useAccount`/`useWorkspace`) — importer state: Privy auth + DB persistence (via `app/api/*`) + user-signed writes, optimistic-then-reconcile. `attest()` runs the full attest → release → post-score chain.
+- **`CreditProvider`** (`useCredit`/`useAccount`/`useWorkspace`) — importer state: Privy auth + DB persistence (via `app/api/*`) + user-signed writes, optimistic-then-reconcile. `attest()` runs the full attest → release → post-score chain.
 - **`FinancierProvider`** (`useFinancier`) — borrowers from `/api/borrowers` (real, cross-machine), overlays the on-chain score from `/api/score`, and funds via a real signed USDC transfer recorded in `/api/facilities`.
 
 ### Shared UI — `components/score-viz.tsx`

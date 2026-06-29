@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import type { Supplier } from "@/lib/account";
 import { press } from "@/lib/motion";
 import { sanitizeSupplier, NAME_MAX, PLACE_MAX } from "@/lib/validate";
 
 /** Add a counterparty. Used in the Suppliers modal and inside the Send flow. */
 export function AddSupplierForm({ onDone }: { onDone: (s?: Supplier) => void }) {
-  const { addSupplier } = useCorridor();
+  const { addSupplier } = useCredit();
   const [form, setForm] = useState({ name: "", city: "", country: "", walletAddress: "" });
   const valid = form.name.trim() && form.city.trim() && form.country.trim();
   const nameOver = form.name.trim().length > NAME_MAX;

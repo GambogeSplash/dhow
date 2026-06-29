@@ -6,10 +6,9 @@ including the smart-contract dev — can read the logic without reading the code
 then jump to the exact source when they need to.
 
 - **Code:** [`lib/credit.ts`](../lib/credit.ts) — pure, deterministic, no I/O.
-  One module: the domain types + currency, the v1 `scoreCorridors`, and the v2
-  model (`assessCredit`, `advanceHealth`). The former `lib/corridor.ts` was
-  merged into this file.
-- **Tests:** [`lib/credit.test.ts`](../lib/credit.test.ts) + [`lib/corridor.test.ts`](../lib/corridor.test.ts) — worked cases.
+  One module, two layers: the payment primitives + behaviour score
+  (`creditScore`), and the underwriting decision (`assessCredit`, `advanceHealth`).
+- **Tests:** [`lib/credit.test.ts`](../lib/credit.test.ts) + [`lib/credit-score.test.ts`](../lib/credit-score.test.ts) — worked cases.
 - **Contract impact:** [`contracts/CREDIT-V2-IMPACT.md`](../contracts/CREDIT-V2-IMPACT.md).
 
 ---
@@ -31,7 +30,7 @@ see, and turning them into an offer.
 
 ## 2. Why this replaced the v1 score
 
-v1 (the `scoreCorridors` function — now folded into `lib/credit.ts` alongside
+v1 (the `creditScore` function — now folded into `lib/credit.ts` alongside
 v2, and mirrored on-chain in `DhowScoreRegistry`) was a single 0–100 number from
 settlement history. Two problems:
 
@@ -188,7 +187,7 @@ every output is a function of `(facts, now)` and nothing else — no clock reads
 inside, no network, no randomness. That's the same property the registry sells
 ("any financier can recompute from immutable facts"). So on-chain and off-chain
 numbers can be made to agree within integer rounding, exactly as v1's
-`_score` already mirrors the v1 `scoreCorridors` (in `lib/credit.ts`).
+`_score` already mirrors the v1 `creditScore` (in `lib/credit.ts`).
 
 **The two new on-chain needs** (detailed in
 [`contracts/CREDIT-V2-IMPACT.md`](../contracts/CREDIT-V2-IMPACT.md)):

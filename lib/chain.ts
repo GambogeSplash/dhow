@@ -129,7 +129,7 @@ function clients(cfg: ChainConfig) {
   return { wallet, pub, account };
 }
 
-export function corridorId(ref: string): Hex {
+export function paymentId(ref: string): Hex {
   return keccak256(toBytes(ref));
 }
 

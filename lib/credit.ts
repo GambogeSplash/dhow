@@ -1,11 +1,13 @@
 /*
- * Dhow credit model — v2
- * ======================
- * The v1 score (`scoreCorridors`, in the domain foundation below) is a single
- * 0–100 reputation number. That
- * conflates three different underwriting questions and can be gamed by paying
- * yourself. This module replaces it with the decomposition a real trade-finance
- * risk team uses — Expected Loss = PD × LGD × EAD — expressed as five layers:
+ * Dhow credit model
+ * =================
+ * One credit system, two layers. The first is a behaviour score (`creditScore`,
+ * in the domain foundation below): a single 0–100 reputation number from settled
+ * payments, mirrored on-chain. On its own that conflates three different
+ * underwriting questions and can be gamed by paying yourself, so the second
+ * layer (`assessCredit`) consumes it as a character signal and decides the line
+ * with the decomposition a real trade-finance risk team uses — Expected Loss =
+ * PD × LGD × EAD — expressed as five layers:
  *
  *   1. GATES      binary knockouts (KYB, tenure, counterparty independence)
  *   2. GRADE      a PD proxy: behaviour + cashflow → grade A–E → expected default
@@ -27,9 +29,9 @@
  */
 
 // ===========================================================================
-// Domain foundation (merged from the former lib/corridor.ts)
+// Domain foundation
 // ---------------------------------------------------------------------------
-// The corridor primitive, currency utilities, and the v1 settlement score. A
+// The payment primitive, currency utilities, and the behaviour score. A
 // Credit Score is a transparent function of REAL settled payments. Pure and
 // chain-agnostic; the Polygon settlement layer swaps in at the edges (txHash).
 // ===========================================================================
@@ -46,7 +48,7 @@ export type SettlementStatus =
 
 export type ProofStatus = "awaiting" | "attested" | "failed";
 
-/** On-chain write lifecycle for a corridor's settlement action. "confirmed"
+/** On-chain write lifecycle for a payment's settlement action. "confirmed"
  *  means the user's signed transaction was mined; "failed" is reached when the
  *  signing/broadcast fails, and a failed write never counts toward the score. */
 export type TxState = "pending" | "confirmed" | "failed";
@@ -59,7 +61,7 @@ export interface Counterparty {
   walletAddress?: string; // on-chain address settlements are sent to
 }
 
-export interface Corridor {
+export interface Payment {
   id: string;
   ref: string; // human ref, e.g. DHW-0412
   supplier: Counterparty;
@@ -105,14 +107,14 @@ export interface ScoreFactor {
   max: number;
 }
 
-export interface CorridorScore {
+export interface CreditScore {
   score: number; // 0..100
   tier: ScoreTier;
   eligible: boolean;
   factors: ScoreFactor[];
   settledCount: number;
   trailingValueAed: number; // settled value, trailing window
-  avgCorridorAed: number;
+  avgPaymentAed: number;
   proofMetRatio: number;
 }
 
@@ -123,30 +125,30 @@ function usdc(amountAed: number): number {
   return Math.round((amountAed / AED_PER_USD) * 100) / 100;
 }
 
-export function makeCorridorUsdc(amountAed: number): number {
+export function makeUsdc(amountAed: number): number {
   return usdc(amountAed);
 }
 
 /**
- * v1 settlement score — built only from SETTLED corridors, each factor
- * independently legible so the UI can show the derivation. In v2 this is the
- * behaviour/character signal that feeds the grade in `assessCredit`, not the
- * whole underwrite. Also mirrored on-chain in DhowScoreRegistry.
+ * Behaviour score — built only from SETTLED payments, each factor independently
+ * legible so the UI can show the derivation. This is the character signal that
+ * feeds the grade in `assessCredit`, not the whole underwrite. Also mirrored
+ * on-chain in DhowScoreRegistry.
  */
-export function scoreCorridors(
-  corridors: Corridor[],
+export function creditScore(
+  payments: Payment[],
   now: number = Date.now(),
-): CorridorScore {
+): CreditScore {
   // A settlement whose on-chain write failed is not creditworthy evidence.
-  const settled = corridors.filter(
+  const settled = payments.filter(
     (c) => c.status === "settled" && c.txState !== "failed",
   );
   const settledCount = settled.length;
   const trailingValueAed = settled.reduce((s, c) => s + c.amountAed, 0);
-  const avgCorridorAed = settledCount ? trailingValueAed / settledCount : 0;
+  const avgPaymentAed = settledCount ? trailingValueAed / settledCount : 0;
 
   // performance: of prooflocks, how many released cleanly (settled) vs refunded
-  const prooflocks = corridors.filter((c) => c.mode === "prooflock");
+  const prooflocks = payments.filter((c) => c.mode === "prooflock");
   const prooflockResolved = prooflocks.filter(
     (c) => c.status === "settled" || c.status === "refunded",
   );
@@ -217,7 +219,7 @@ export function scoreCorridors(
     factors,
     settledCount,
     trailingValueAed,
-    avgCorridorAed,
+    avgPaymentAed,
     proofMetRatio,
   };
 }
@@ -227,10 +229,10 @@ export function scoreCorridors(
  * A fraction of the average settlement, scaled by score tier. Capital-light:
  * Dhow surfaces this to a financier; it does not lend its own balance sheet.
  */
-export function advanceOffer(s: CorridorScore): number {
+export function advanceOffer(s: CreditScore): number {
   if (!s.eligible) return 0;
   const rate = s.tier === "preferred" ? 0.2 : 0.15;
-  const raw = s.avgCorridorAed * rate;
+  const raw = s.avgPaymentAed * rate;
   return Math.max(0, Math.round(raw / 1000) * 1000); // round to nearest AED 1,000
 }
 
@@ -249,7 +251,7 @@ function round1(n: number): number {
 }
 
 // ===========================================================================
-// Credit model v2 — the underwriting decision built on the foundation above.
+// Credit assessment — the underwriting decision built on the foundation above.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
@@ -281,7 +283,7 @@ export interface BusinessProfile {
 
 export interface CreditInput {
   profile: BusinessProfile;
-  corridors: Corridor[];
+  payments: Payment[];
   receivables?: Receivable[];
   now?: number;
 }
@@ -397,15 +399,15 @@ export function assessCredit(input: CreditInput): CreditAssessment {
   const now = input.now ?? Date.now();
   const linked = new Set(input.profile.linkedCounterpartyIds ?? []);
 
-  // Arm's-length settled corridors only: drop failed writes AND any settlement
+  // Arm's-length settled payments only: drop failed writes AND any settlement
   // to an ownership-linked counterparty (self-dealing earns no credit).
-  const settled = input.corridors.filter(
+  const settled = input.payments.filter(
     (c) =>
       c.status === "settled" &&
       c.txState !== "failed" &&
       !linked.has(c.supplier.id),
   );
-  const refunded = input.corridors.filter((c) => c.status === "refunded");
+  const refunded = input.payments.filter((c) => c.status === "refunded");
 
   // ---- shared aggregates -------------------------------------------------
   const settledCount = settled.length;
@@ -425,7 +427,7 @@ export function assessCredit(input: CreditInput): CreditAssessment {
   if (distinctCounterparties < ELIGIBLE_MIN_COUNTERPARTIES)
     gateFailures.push("too_few_counterparties");
   // Circular flow: any settlement routed to a linked wallet is a hard stop.
-  if (input.corridors.some((c) => c.status === "settled" && linked.has(c.supplier.id)))
+  if (input.payments.some((c) => c.status === "settled" && linked.has(c.supplier.id)))
     gateFailures.push("circular_fund_flow");
   if (input.profile.inActiveDefault) gateFailures.push("active_default");
   const eligible = gateFailures.length === 0;
@@ -648,7 +650,7 @@ function healthAction(band: HealthBand, overdueDays: number): string {
 
 /** Settled volume bucketed by calendar month, most-recent-first, dropping
  *  empty months so the variation reflects active trading. */
-function monthlyVolumes(settled: Corridor[], now: number): number[] {
+function monthlyVolumes(settled: Payment[], now: number): number[] {
   const buckets = new Map<number, number>();
   for (const c of settled) {
     const t = c.settledAt ?? now;
@@ -664,7 +666,7 @@ function monthKey(ms: number): number {
 }
 
 /** Recent-90d vs prior-90d throughput, squashed to 0..1 around 0.5 = flat. */
-function trajectoryRatio(settled: Corridor[], now: number): number {
+function trajectoryRatio(settled: Payment[], now: number): number {
   const window = 90 * 86_400_000;
   let recent = 0;
   let prior = 0;
@@ -682,7 +684,7 @@ function trajectoryRatio(settled: Corridor[], now: number): number {
 
 /** Herfindahl concentration index over counterparties: 0 = perfectly diverse,
  *  1 = a single counterparty. */
-function herfindahl(settled: Corridor[]): number {
+function herfindahl(settled: Payment[]): number {
   const total = settled.reduce((s, c) => s + c.amountAed, 0);
   if (total === 0) return 1;
   const byCp = new Map<string, number>();
