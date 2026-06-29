@@ -1,9 +1,9 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { Avatar } from "@/components/Avatar";
-import { aed, usdcLabel } from "@/lib/corridor";
+import { aed, usdcLabel } from "@/lib/credit";
 import { press } from "@/lib/motion";
 
 const INSPECTOR = "Gulf Inspectorate";
@@ -14,10 +14,10 @@ const INSPECTOR = "Gulf Inspectorate";
  * attestation is the authorization for the escrow to release. This confirms what
  * is being attested, who attests it, and where the money goes before it moves.
  */
-export function AttestProofForm({ corridorId, onClose }: { corridorId: string; onClose: () => void }) {
-  const { corridors, attest } = useCorridor();
-  const c = corridors.find((x) => x.id === corridorId);
-  if (!c) return <div className="p-6 text-sm text-ink-3">This corridor is no longer open.</div>;
+export function AttestProofForm({ paymentId, onClose }: { paymentId: string; onClose: () => void }) {
+  const { payments, attest } = useCredit();
+  const c = payments.find((x) => x.id === paymentId);
+  if (!c) return <div className="p-6 text-sm text-ink-3">This payment is no longer open.</div>;
 
   return (
     <div className="p-6">
@@ -57,7 +57,7 @@ export function AttestProofForm({ corridorId, onClose }: { corridorId: string; o
         <motion.button
           {...press}
           onClick={() => {
-            attest(corridorId);
+            attest(paymentId);
             onClose();
           }}
           className="rounded-full bg-teal px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-deep"

@@ -6,7 +6,7 @@ import { createShipmentAttestation, easConfigured } from "@/lib/eas";
 export const runtime = "nodejs";
 
 /*
- * Create a shipment-proof attestation for a corridor. The trusted inspector
+ * Create a shipment-proof attestation for a payment. The trusted inspector
  * signs it on-chain (server-side operator key); the returned uid is then passed
  * to the user-signed release. Errors clearly when EAS isn't configured — no
  * fabricated attestations.

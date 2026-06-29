@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { useOverlays } from "@/components/overlays";
 import { springSoft, press } from "@/lib/motion";
 
@@ -13,7 +13,7 @@ import { springSoft, press } from "@/lib/motion";
  * it explicitly.
  */
 export function SampleBanner() {
-  const { isSample, startReal } = useCorridor();
+  const { isSample, startReal } = useCredit();
   const { openAddSupplier } = useOverlays();
 
   return (

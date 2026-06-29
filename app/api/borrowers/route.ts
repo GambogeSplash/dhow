@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 /*
  * Financier-facing borrower feed: onboarded businesses with their settled
- * corridor history, read from the database. The financier derives the Credit
+ * payment history, read from the database. The financier derives the Credit
  * Score from this the same way the importer sees it, and overlays the on-chain
  * verified score from the registry via /api/score.
  */

@@ -1,18 +1,18 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { stagger, riseItem } from "@/lib/motion";
 
 export default function SuppliersPage() {
-  const { suppliers, corridors } = useCorridor();
+  const { suppliers, payments } = useCredit();
   const { openAddSupplier, openSend } = useOverlays();
 
   function totalTo(supplierId: string): number {
-    return corridors
+    return payments
       .filter((c) => c.supplier.id === supplierId && c.status === "settled")
       .reduce((s, c) => s + c.amountAed, 0);
   }

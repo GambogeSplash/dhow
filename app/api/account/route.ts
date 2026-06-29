@@ -22,7 +22,7 @@ function notConfigured() {
   );
 }
 
-/** The authenticated business's full workspace (business + suppliers + corridors). */
+/** The authenticated business's full workspace (business + suppliers + payments). */
 export async function GET(req: NextRequest) {
   if (!privyConfigured() || !dbConfigured()) return notConfigured();
   const userId = await getUserId(req);

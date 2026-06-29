@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title DhowScoreRegistry — on-chain trade-credit reputation, computed from facts.
 /// @notice The underwriting primitive, on-chain. The registry stores the RAW
-///         settlement facts per business (how many corridors released cleanly,
+///         settlement facts per business (how many payments released cleanly,
 ///         how many refunded, cumulative volume, recency) and computes the
 ///         trade-credit score from them at read time. The facts are written
 ///         ONLY by the escrow contract, in the SAME transaction as the on-chain
@@ -22,8 +22,8 @@ contract DhowScoreRegistry is Ownable {
     ///         the escrow on every release/refund. Sufficient to recompute the
     ///         score with no off-chain input beyond the current block time.
     struct Stats {
-        uint64 settledCount; // corridors released clean to the supplier
-        uint64 refundedCount; // corridors refunded (proof failed / timed out)
+        uint64 settledCount; // payments released clean to the supplier
+        uint64 refundedCount; // payments refunded (proof failed / timed out)
         uint128 settledVolume; // cumulative settled USDC (6dp)
         uint64 firstSettledAt; // first clean settlement (ms-agnostic, unix secs)
         uint64 lastSettledAt; // most recent clean settlement
@@ -46,7 +46,7 @@ contract DhowScoreRegistry is Ownable {
     /*//////////////////////////////////////////////////////////////
                           SCORING CONSTANTS
     //////////////////////////////////////////////////////////////*/
-    // Mirrors lib/corridor.ts: history(30) + volume(25) + performance(30) + cadence(15) = 100.
+    // Mirrors creditScore in lib/credit.ts: history(30) + volume(25) + performance(30) + cadence(15) = 100.
     uint256 internal constant W_HISTORY = 30;
     uint256 internal constant W_VOLUME = 25;
     uint256 internal constant W_PERFORMANCE = 30;
@@ -145,8 +145,8 @@ contract DhowScoreRegistry is Ownable {
         return stats[business];
     }
 
-    /// @dev Pure scoring function. Integer arithmetic mirroring lib/corridor.ts
-    ///      closely enough that on- and off-chain numbers agree within rounding.
+    /// @dev Pure scoring function. Integer arithmetic mirroring creditScore in
+    ///      lib/credit.ts closely enough that on- and off-chain numbers agree within rounding.
     function _score(Stats memory s, uint256 nowTs) internal pure returns (uint16) {
         // history: min(count, CAP) / CAP * 30
         uint256 cappedCount = s.settledCount < HISTORY_CAP ? s.settledCount : HISTORY_CAP;

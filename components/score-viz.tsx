@@ -1,8 +1,8 @@
 "use client";
 
 import { AnimatedNumber } from "@/components/AnimatedNumber";
-import { CorridorScore, ELIGIBLE_THRESHOLD, ScoreFactor } from "@/lib/corridor";
-import type { Grade } from "@/lib/credit";
+import { CreditScore, ELIGIBLE_THRESHOLD, ScoreFactor, aed } from "@/lib/credit";
+import type { AdvanceHealth, Grade, HealthBand } from "@/lib/credit";
 
 /** The v2 credit grade as a coloured chip — one component, used by the importer
  *  Capital page and the financier desk so both read the grade identically. */
@@ -25,10 +25,61 @@ export function GradeBadge({ grade, size = 36 }: { grade: Grade; size?: number }
 }
 
 /*
- * Shared Credit Score visualisation, used by both the importer's Corridor
+ * Shared Credit Score visualisation, used by both the importer's Payment
  * Record and the financier's deal view so the two personas read the same
  * number in the same visual language.
  */
+
+/** Runtime coverage on a live advance — the `assessCredit` companion that says
+ *  how safe the position is *now*, not just at origination. Coverage ÷ exposure,
+ *  with the 1.0× floor marked; below it the advance is under-covered. */
+export function HealthFactorMeter({ health }: { health: AdvanceHealth }) {
+  const bandTone: Record<HealthBand, { pill: string; bar: string; text: string }> = {
+    healthy: { pill: "bg-teal-tint text-teal-deep", bar: "bg-teal", text: "text-teal-deep" },
+    watch: { pill: "bg-brass-tint text-brass-deep", bar: "bg-brass", text: "text-brass-deep" },
+    tight: { pill: "bg-brass/30 text-brass-deep", bar: "bg-brass-deep", text: "text-brass-deep" },
+    impaired: { pill: "bg-danger/15 text-danger", bar: "bg-danger", text: "text-danger" },
+  };
+  const tone = bandTone[health.band];
+  const SCALE = 1.5; // bar tops out at 1.5×; the 1.0× floor sits at 2/3
+  const fillPct = Math.min(1, (Number.isFinite(health.hf) ? health.hf : SCALE) / SCALE) * 100;
+  const floorPct = (1 / SCALE) * 100;
+
+  return (
+    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wide text-ink-3">Advance health</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${tone.pill}`}>
+          {health.band}
+        </span>
+      </div>
+
+      <div className="mt-2 flex items-baseline gap-2">
+        <span className={`font-display tnum text-3xl leading-none tracking-tight ${tone.text}`}>
+          {health.headline}
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <div className="relative h-2 rounded-full bg-surface-sunk">
+          <div
+            className={`absolute inset-y-0 left-0 rounded-full ${tone.bar} transition-[width] duration-700 ease-out`}
+            style={{ width: `${fillPct}%` }}
+          />
+          {/* the 1.0× floor: at or above is covered, below is under-covered */}
+          <div className="absolute -top-1 h-4 w-px bg-ink-3" style={{ left: `${floorPct}%` }} />
+        </div>
+        <div className="mt-1.5 flex justify-between text-xs text-ink-faint">
+          <span>{aed(health.coverageAed)} cover</span>
+          <span style={{ left: `${floorPct}%` }} className="relative -translate-x-1/2">1.0×</span>
+          <span>{aed(health.exposureAed)} owed</span>
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs text-ink-3">{health.action}</p>
+    </div>
+  );
+}
 
 export function TierPill({ tier }: { tier: string }) {
   const map: Record<string, string> = {
@@ -73,7 +124,7 @@ export function ScoreCard({
   prevScore,
   verifiedOnChain,
 }: {
-  score: CorridorScore;
+  score: CreditScore;
   prevScore?: number;
   verifiedOnChain?: boolean;
 }) {

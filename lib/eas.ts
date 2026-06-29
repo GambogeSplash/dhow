@@ -9,7 +9,7 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { ChainConfig, corridorId } from "./chain";
+import { ChainConfig, paymentId } from "./chain";
 
 /*
  * Server-only EAS layer. The trusted inspector ("Gulf Inspectorate") signs a
@@ -33,9 +33,9 @@ const EAS_ABI = [
   },
 ] as const;
 
-// Schema: bytes32 corridorId, string ref, string docType, string portOfEntry, uint64 inspectedAt, address supplier
+// Schema: bytes32 paymentId, string ref, string docType, string portOfEntry, uint64 inspectedAt, address supplier
 const SCHEMA_PARAMS = parseAbiParameters(
-  "bytes32 corridorId, string ref, string docType, string portOfEntry, uint64 inspectedAt, address supplier",
+  "bytes32 paymentId, string ref, string docType, string portOfEntry, uint64 inspectedAt, address supplier",
 );
 
 export interface AttestationResult {
@@ -62,7 +62,7 @@ function clients(cfg: ChainConfig) {
 }
 
 /**
- * Create a shipment-proof attestation for a corridor and return its uid.
+ * Create a shipment-proof attestation for a payment and return its uid.
  * The uid is then passed to DhowEscrow.releaseWithAttestation to settle.
  */
 export async function createShipmentAttestation(
@@ -70,7 +70,7 @@ export async function createShipmentAttestation(
   ref: string,
   supplier: Hex,
 ): Promise<AttestationResult> {
-  const cid = corridorId(ref);
+  const cid = paymentId(ref);
   const inspectedAt = BigInt(Math.floor(Date.now() / 1000));
   const data = encodeAbiParameters(SCHEMA_PARAMS, [
     cid,

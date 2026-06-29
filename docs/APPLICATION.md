@@ -30,7 +30,7 @@ Dhow has three layers, all built:
 
 1. **Settlement (the wedge).** Cross-border supplier payments settle in **native USDC on Polygon PoS** in minutes for ~$0.002, with AED as the quote/invoicing currency (the CBUAE peg, 3.6725). Open settlement is a direct transfer; the high-value path is a **Proof-Lock**: USDC escrowed on-chain, released automatically when shipment proof is attested.
    - `DhowEscrow.sol` — `lock` / `attestRelease` / timeout `refund`, reentrancy-guarded, 6 passing Foundry tests. Attester role models the inspector attestation; production swaps it for an **EAS** (Ethereum Attestation Service) check.
-2. **Corridor Record (the moat).** Every settled corridor writes a verified on-chain cashflow record and lifts a **Corridor Score** — a transparent function of settled volume, proof performance, and cadence. This is the underwriting primitive: data we generated and settled ourselves, which no competitor can fabricate or source.
+2. **Cashflow Record (the moat).** Every settled payment writes a verified on-chain cashflow record and lifts a **Credit Score** — a transparent function of settled volume, proof performance, and cadence. This is the underwriting primitive: data we generated and settled ourselves, which no competitor can fabricate or source.
 3. **Capital (the business).** Above a score threshold, Dhow surfaces the SME to third-party financiers with a live verified cashflow feed. **Dhow is a marketplace, not a balance-sheet lender** — capital-light, and it makes banks our demand side rather than our competition.
 
 **Why Polygon.** This is a direct fit for Polygon's **Open Money Stack** (wallets, fiat ramps, cross-chain routing, settlement). Sub-cent fees make many small settlements economical; native USDC gives clean, regulated settlement liquidity.
@@ -51,7 +51,7 @@ Dhow has three layers, all built:
 
 **GTM.** Land through tourist- and trade-heavy SME importers where stablecoin settlement beats correspondent banking outright. Acquire financiers via DIFC's network and the 289 banking institutions — the contest itself supplies the demand side that normally makes a two-sided marketplace hard to cold-start.
 
-**Cold-start answer.** Day one Dhow underwrites nothing; the payment product stands alone (cheaper, faster, transparent), so the data is *earned*, not assumed. Credit switches on per-SME once they cross N settled corridors.
+**Cold-start answer.** Day one Dhow underwrites nothing; the payment product stands alone (cheaper, faster, transparent), so the data is *earned*, not assumed. Credit switches on per-SME once they cross N settled payments.
 
 ---
 
@@ -72,7 +72,7 @@ Four lines, layered:
 ## 6. MVP / Prototype
 
 A working prototype is built and verified:
-- Four surfaces (landing, Send, Corridor Record, Capital) in a production-grade UI.
+- Four surfaces (landing, Send, Cashflow Record, Capital) in a production-grade UI.
 - The full flywheel runs end to end: send a Proof-Lock → attest shipment proof → score crosses the eligibility threshold → working capital offer derives and unlocks → a third-party financier funds it.
 - **Verified on a live EVM chain:** the Proof-Lock locked 112,185.16 USDC into the escrow and released it to the supplier on attestation (real transactions, real settlement). Amoy deployment is a single funded-key step away (`docs/CHAIN.md`).
 - Live link: **https://dhow-pi.vercel.app**  ·  Repo: *[TODO: push to GambogeSplash]*

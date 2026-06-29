@@ -4,7 +4,7 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider, createConfig } from "@privy-io/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http } from "viem";
-import { CorridorProvider } from "./CorridorProvider";
+import { CreditProvider } from "./CreditProvider";
 import { dhowChain } from "@/lib/chain-client";
 import { PREVIEW_MODE } from "@/lib/preview";
 
@@ -70,7 +70,7 @@ export function PrivyStack({ children }: { children: React.ReactNode }) {
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <PrivyStack>
-      <CorridorProvider>{children}</CorridorProvider>
+      <CreditProvider>{children}</CreditProvider>
     </PrivyStack>
   );
 }

@@ -50,7 +50,7 @@ live transaction in front of judges beats any deck.
 - [ ] Provision production env: `NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `DATABASE_URL` (Neon), and the operator/inspector signer key for the attestation + score-post routes.
 - [ ] Apply `db/schema.sql` to the production Neon database.
 - [ ] Set every chain env var on Vercel (RPC, chain id 80002, USDC/escrow/registry/EAS addresses, explorer base, inspector key). See [`docs/CHAIN.md`](CHAIN.md) and [`docs/SETUP.md`](SETUP.md).
-- [ ] Smoke-test each API route against the live DB + chain (`/api/account`, `/suppliers`, `/corridors`, `/attest`, `/score`, `/borrowers`, `/facilities`, `/faucet`).
+- [ ] Smoke-test each API route against the live DB + chain (`/api/account`, `/suppliers`, `/payments`, `/attest`, `/score`, `/borrowers`, `/facilities`, `/faucet`).
 - **Acceptance:** the deployed app at the public URL runs the full flywheel with real txs, not the configure-notice and not preview mode.
 
 ### Product
@@ -70,7 +70,7 @@ stranger. Reliability, observability, and the compliance perimeter.
 
 ### Contracts
 - [ ] Wire canonical EAS on Amoy in place of the EAS-compatible stand-in: register the shipment-proof schema, point the escrow at the real EAS, keep the `requireEas` fallback for stage resilience.
-- [ ] Add fuzz/invariant tests for the escrow (no double release, refund only after deadline, attestation binding to `corridorId` blocks replay).
+- [ ] Add fuzz/invariant tests for the escrow (no double release, refund only after deadline, attestation binding to `paymentId` blocks replay).
 - [ ] Run the static-analysis pass (aderyn is already wired) and triage findings. Document any accepted findings.
 - **Acceptance:** `forge test` green including fuzz; EAS path verified against canonical EAS on Amoy; aderyn report attached to the repo.
 
@@ -143,7 +143,7 @@ path to mainnet. Pick from these against feedback; do not build all of it.
 
 ### Branching and review
 - Feature work off `main`, PR, `main` auto-deploys to Vercel.
-- Three people now: anything touching the shared seam (`lib/corridor.ts`, the score-registry semantics, the EAS schema) needs a second reviewer from the affected lane.
+- Three people now: anything touching the shared seam (`lib/credit.ts`, the score-registry semantics, the EAS schema) needs a second reviewer from the affected lane.
 
 ### The shared seam, restated
 If a change touches the scoring engine, the score registry, or the attestation

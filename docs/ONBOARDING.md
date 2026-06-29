@@ -26,12 +26,12 @@ strict signing rule:
    refund  (USER signs)             (FINANCIER signs)
         │                                │
         ▼            app/api             ▼
-   account · suppliers · corridors · attest · score · borrowers · facilities · faucet
+   account · suppliers · payments · attest · score · borrowers · facilities · faucet
         │   (Privy-verified persistence + operator-only chain actions)
         ▼
    Postgres (Neon)              Polygon Amoy
    businesses/suppliers/         DhowEscrow · DhowScoreRegistry
-   corridors/facilities          EAS attestation · USDC
+   payments/facilities          EAS attestation · USDC
 ```
 
 **Signing rule (do not break it):**
@@ -43,7 +43,7 @@ strict signing rule:
   `lib/chain.ts` + `lib/eas.ts`. These are legitimately third-party / operator
   actions, not the buyer's money.
 
-**The shared contract:** `lib/corridor.ts` is the scoring engine. It is pure,
+**The shared contract:** `lib/credit.ts` is the scoring engine. It is pure,
 chain-agnostic, and imported by **both** the client (optimistic UI) and the
 server (posting the score on-chain). **Never fork it** — both sides must compute
 the identical number, or the on-chain score and the UI disagree.
@@ -56,7 +56,7 @@ Everything under `contracts/`. You own the on-chain truth layer.
 
 | File | What it is |
 | --- | --- |
-| `contracts/src/DhowEscrow.sol` | The Proof-Lock. `lock` → `releaseWithAttestation` (EAS-gated, permissionless once a valid attestation exists) → `refund` (after deadline). `releaseByInspector` is the owner-gated fallback. On every release/refund it calls the registry's `recordSettlement` in the **same transaction** (wrapped in try/catch so accounting can never block the money). `corridorId = keccak256(ref)` is the universal key. |
+| `contracts/src/DhowEscrow.sol` | The Proof-Lock. `lock` → `releaseWithAttestation` (EAS-gated, permissionless once a valid attestation exists) → `refund` (after deadline). `releaseByInspector` is the owner-gated fallback. On every release/refund it calls the registry's `recordSettlement` in the **same transaction** (wrapped in try/catch so accounting can never block the money). `paymentId = keccak256(ref)` is the universal key. |
 | `contracts/src/DhowScoreRegistry.sol` | On-chain credit reputation, computed from facts. `recordSettlement` is **escrow-only** (the `recorder`); `scoreOf` / `isEligible` compute the live score on-chain from the raw `statsOf` facts. No off-chain poster — the financier reads a number that moves with the money even if Dhow's backend is down. |
 | `contracts/src/MockUSDC.sol` | 6-dp open-mint test token. Stand-in for Circle USDC. |
 | `contracts/src/interfaces/IEAS.sol` | Minimal vendored EAS interface so the escrow verifies attestations without a heavy dep. `test/mocks/MockEAS.sol` is the EAS-compatible stand-in used on Amoy. |
@@ -83,15 +83,15 @@ operator chain spine.
 | File | What it is |
 | --- | --- |
 | `lib/db.ts` | Neon serverless Postgres client + `dbConfigured()` gate. |
-| `db/schema.sql` | businesses / suppliers / corridors / facilities. Apply this to your DB. |
+| `db/schema.sql` | businesses / suppliers / payments / facilities. Apply this to your DB. |
 | `lib/store-server.ts` | Server-authoritative CRUD, **every function scoped by `businessId` (the verified Privy DID)** — a caller can only touch their own rows. |
 | `lib/privy-server.ts` | `getUserId(req)` / `privyConfigured()` — verifies the Privy access token. Every mutating route gates on this. |
 | `lib/chain.ts` | Server-only viem signer for **operator** actions: EAS attest, score post/read, faucet, USDC transfer. Env-gated via `getChainConfig()`. |
 | `lib/eas.ts` | Inspector signs a shipment-proof attestation, returns its uid for release. |
-| `lib/indexer.ts` | Reads escrow events so the financier derives a borrower's corridors from chain state, cross-machine. |
+| `lib/indexer.ts` | Reads escrow events so the financier derives a borrower's payments from chain state, cross-machine. |
 | `app/api/account` | GET/POST the authenticated business profile + wallet. |
 | `app/api/suppliers` | POST add a supplier. |
-| `app/api/corridors` | GET (public chain-derived feed by payer) · POST (create after user signs) · PATCH (lifecycle). |
+| `app/api/payments` | GET (public chain-derived feed by payer) · POST (create after user signs) · PATCH (lifecycle). |
 | `app/api/attest` | POST: operator creates the EAS shipment-proof attestation. |
 | `app/api/score` | POST: post score on-chain · GET: read `scoreOf` / eligibility. |
 | `app/api/borrowers` | GET: scored borrower feed for the financier. |
@@ -99,7 +99,7 @@ operator chain spine.
 | `app/api/faucet` | POST: operator sponsors a new user's wallet with POL + test USDC. |
 
 **First hour:** read `lib/store-server.ts` (the data model in code) alongside
-`db/schema.sql`, then `app/api/corridors/route.ts` — it shows the full pattern:
+`db/schema.sql`, then `app/api/payments/route.ts` — it shows the full pattern:
 Privy guard → DB write → chain-derived read. Note the env-gating: with no DB or
 Privy config the routes degrade gracefully rather than crash.
 
@@ -117,16 +117,16 @@ and the design language.
 | --- | --- |
 | `app/page.tsx` | Landing. |
 | `app/onboarding/` | Sign in (Privy) → business → supplier → wallet. |
-| `app/(app)/{overview,send,corridor,capital,suppliers}` | Importer surfaces. |
+| `app/(app)/{overview,send,credit,capital,suppliers}` | Importer surfaces. |
 | `app/(financier)/{desk,opportunities,deal/[business],portfolio}` | Financier surfaces. |
-| `components/CorridorProvider.tsx` | Importer client store: `useCorridor` / `useAccount` / `useWorkspace`. Privy auth + DB persistence + user-signed writes. `attest()` runs the full attest → release → post-score chain. |
+| `components/CreditProvider.tsx` | Importer client store: `useCredit` / `useAccount` / `useWorkspace`. Privy auth + DB persistence + user-signed writes. `attest()` runs the full attest → release → post-score chain. |
 | `components/FinancierProvider.tsx` | Financier store: borrowers from `/api/borrowers` + on-chain score overlay; funds via a real signed USDC transfer. |
 | `components/Providers.tsx` | Privy + wagmi + react-query, scoped to app+onboarding so the public landing stays provider-free. |
 | `components/{score-viz,AnimatedNumber,Sidebar,AppShell,FaucetCard,DhowMark,LandingCta}.tsx` | Shared UI. `score-viz` (`ScoreCard`/`FactorRow`/`TierPill`) renders the same number both personas read. |
 | `app/globals.css` | Design tokens: chart-paper `#faf8f3`, indigo ink `#11202e`, verdigris teal `#0c7c66` (trust), brass `#b07d28` (value moments). Spectral display + Geist + Geist Mono, tabular figures. No dark mode. |
 
 **First hour:** run it (below), click the full flywheel, then read
-`CorridorProvider.tsx` — it's where UI state, the scoring engine, and the
+`CreditProvider.tsx` — it's where UI state, the scoring engine, and the
 user-signed chain calls meet.
 
 **Copy rules (enforced):** no em dashes or dash-joined clauses in user-facing
@@ -162,7 +162,7 @@ Full local-chain flow (anvil → deploy → real txs) and Amoy deploy:
 
 ## The shared seam, restated
 
-If you change `lib/corridor.ts`, the contract `DhowScoreRegistry` semantics, or
+If you change `lib/credit.ts`, the contract `DhowScoreRegistry` semantics, or
 the EAS schema, you've touched all three lanes at once. Flag those in the PR and
 loop the other two in. Everything else is mostly lane-local.
 </content>

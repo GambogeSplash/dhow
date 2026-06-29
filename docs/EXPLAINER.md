@@ -30,7 +30,7 @@ Dhow does the payment, and the payment leaves a trail we own.
 
 2. **For higher-value shipments we use a Proof-Lock.** The money locks in escrow on-chain and only releases to the supplier when a shipment proof is attested (for example, an inspector confirms the container shipped). This is the safe, conditional version of a payment that a bank charges a fee and ten days to administer. It also produces a clean signal: this importer pays, and they pay on real fulfilment.
 
-3. **Every settled payment writes to a Corridor Record.** That is the importer's verified cashflow ledger, building up automatically as a by-product of paying suppliers. As it fills, a **Corridor Score** rises. This is the underwriting data banks structurally cannot get, because we settled the payments ourselves so the data cannot be faked.
+3. **Every settled payment writes to a Cashflow Record.** That is the importer's verified cashflow ledger, building up automatically as a by-product of paying suppliers. As it fills, a **Credit Score** rises. This is the underwriting data banks structurally cannot get, because we settled the payments ourselves so the data cannot be faked.
 
 4. **Once the score crosses a threshold, Dhow surfaces that importer to financiers** (banks, funds, investors already in the UAE) who can now fund the exact SMEs they used to reject. We do not lend our own money. We match a de-risked borrower to a third-party financier and take a fee.
 
@@ -59,7 +59,7 @@ The shortest way to say it: **"We don't ask anyone to digitize trade. We pay the
 **With Dhow:**
 - She pays Meridian through Dhow. Settles in minutes, FX is shown up front, both she and Meridian see the same confirmed record.
 - For her big quarterly order she uses a Proof-Lock: the funds lock on-chain and release the moment the shipment is attested. No bank fee, no ten-day wait.
-- After a few of these, her Corridor Record shows three clean, verified settlements. Her Corridor Score crosses the line.
+- After a few of these, her Cashflow Record shows three clean, verified settlements. Her Credit Score crosses the line.
 - Dhow surfaces her to Creek Capital, a financier on the platform. Creek can see three real shipments settled and verified on our rails, so they extend AED 50,000 in working capital. Mariam accepts in one tap. The money lands.
 - The morning of, she was an unfundable 41%-rejection SME. By the afternoon she drew working capital, because a third party could finally see her cashflow.
 
@@ -73,8 +73,8 @@ This is the script for Demo Day. The whole point: the credit offer must **visibl
 |---|---|
 | 0:00 to 0:20 | **Send a Proof-Lock.** Al Noor pays Meridian. AED-quoted USDC locks in escrow on Polygon (a real testnet transaction). This is the conditional payment a bank charges a fee and ten days for. |
 | 0:20 to 0:35 | **Condition fires.** The shipment proof is attested. Funds release automatically to Meridian, settled in seconds, FX shown. Seven to ten days just became this. |
-| 0:35 to 0:55 | **Record updates, live.** The settlement writes to the Corridor Record and the score ticks up off the payment that just cleared. The third corridor crosses the threshold. |
-| 0:55 to 1:20 | **Capital, from a real counterparty.** Crossing the threshold surfaces Al Noor to Creek Capital, which extends AED 50,000 against the corridor. Al Noor accepts in one tap. The capital lands. A third party funded it, not us. |
+| 0:35 to 0:55 | **Record updates, live.** The settlement writes to the Cashflow Record and the score ticks up off the payment that just cleared. The third payment crosses the threshold. |
+| 0:55 to 1:20 | **Capital, from a real counterparty.** Crossing the threshold surfaces Al Noor to Creek Capital, which extends AED 50,000 against the payment. Al Noor accepts in one tap. The capital lands. A third party funded it, not us. |
 | 1:20 to 1:30 | **Close.** "Al Noor was a 41%-rejection SME this morning. It just drew working capital, because Creek Capital can see three shipments settled and verified on our rails. We don't lend. We make the unfundable legible, and we hand the financing to the room." |
 
 ---
@@ -100,7 +100,7 @@ People worry "is crypto payment even legal in the UAE?" The answer for our setup
 
 ## Where the project is right now
 
-- The full product is built and runs: four surfaces (Send, Corridor Record, Capital, plus a Receipt view), real accounts and onboarding, free-form payments, a refund and dispute path.
+- The full product is built and runs: four surfaces (Send, Cashflow Record, Capital, plus a Receipt view), real accounts and onboarding, free-form payments, a refund and dispute path.
 - The on-chain settlement works on a local blockchain (real escrow contract, lock and release verified). Going live on Polygon's public testnet (Amoy) is the one parked step, waiting on funding a test wallet.
 - It is deployed and clickable at **https://dhow-pi.vercel.app** (running in simulation mode, so it demos without needing live chain config).
 - The written application to the challenge is drafted in `docs/APPLICATION.md`. The team section still needs filling in.

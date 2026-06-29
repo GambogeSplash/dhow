@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount } from "@/components/CorridorProvider";
+import { useAccount } from "@/components/CreditProvider";
 import { Sidebar, MobileBar } from "@/components/Sidebar";
 import { OverlayProvider } from "@/components/overlays";
 import { RepayBanner } from "@/components/RepayBanner";

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { assessCredit, type CreditInput, type Receivable } from "./credit";
-import type { Corridor, Counterparty } from "./corridor";
+import { assessCredit, advanceHealth, type CreditInput, type Receivable } from "./credit";
+import type { Payment, Counterparty } from "./credit";
 
 const DAY = 86_400_000;
 const NOW = 1_700_000_000_000;
@@ -9,7 +9,7 @@ function cp(id: string): Counterparty {
   return { id, name: id, city: "Dubai", country: "AE" };
 }
 
-function settled(id: string, supplier: string, amountAed: number, daysAgo: number): Corridor {
+function settled(id: string, supplier: string, amountAed: number, daysAgo: number): Payment {
   return {
     id,
     ref: `DHW-${id}`,
@@ -26,10 +26,10 @@ function settled(id: string, supplier: string, amountAed: number, daysAgo: numbe
   };
 }
 
-function base(corridors: Corridor[], extra: Partial<CreditInput> = {}): CreditInput {
+function base(payments: Payment[], extra: Partial<CreditInput> = {}): CreditInput {
   return {
     profile: { kybVerified: true, onboardedAt: NOW - 120 * DAY },
-    corridors,
+    payments,
     now: NOW,
     ...extra,
   };
@@ -110,12 +110,77 @@ describe("assessCredit — grade + capacity", () => {
   });
 
   it("refunds drop performance and the grade", () => {
-    const withRefund: Corridor[] = [
+    const withRefund: Payment[] = [
       ...healthy,
       { ...settled("5", "sup-b", 100_000, 20), status: "refunded", proof: { status: "failed", label: "x" } },
     ];
     const clean = assessCredit(base(healthy));
     const dinged = assessCredit(base(withRefund));
     expect(dinged.score).toBeLessThan(clean.score);
+  });
+});
+
+describe("advanceHealth — runtime coverage on a live advance", () => {
+  function rec(over: Partial<Receivable> = {}): Receivable {
+    return {
+      id: "r1",
+      debtor: cp("buyer-x"),
+      amountAed: 300_000,
+      dueAt: NOW + 30 * DAY,
+      attestationUid: "0xproof",
+      status: "verified",
+      ...over,
+    };
+  }
+
+  it("a fresh verified receivable covers the advance → healthy", () => {
+    const h = advanceHealth({ outstandingAed: 200_000, receivables: [rec()], now: NOW });
+    // 300k × 0.8 advance-rate = 240k coverage over 200k exposure = 1.2×... plus reserve none
+    expect(h.coverageAed).toBe(240_000);
+    expect(h.hf).toBeCloseTo(1.2, 2);
+    expect(h.band).toBe("watch"); // 1.2 sits below the 1.3 healthy line
+    expect(h.exposureAed).toBe(200_000);
+  });
+
+  it("reserve held lifts coverage and the band", () => {
+    const bare = advanceHealth({ outstandingAed: 200_000, receivables: [rec()], now: NOW });
+    const withReserve = advanceHealth({
+      outstandingAed: 200_000,
+      receivables: [rec()],
+      reserveHeldAed: 30_000,
+      now: NOW,
+    });
+    expect(withReserve.coverageAed).toBe(bare.coverageAed + 30_000);
+    expect(withReserve.hf).toBeGreaterThan(bare.hf);
+    expect(withReserve.band).toBe("healthy"); // 270k / 200k = 1.35×
+  });
+
+  it("an overdue receivable decays coverage toward zero", () => {
+    const onTime = advanceHealth({ outstandingAed: 200_000, receivables: [rec()], now: NOW });
+    const late = advanceHealth({
+      outstandingAed: 200_000,
+      receivables: [rec({ dueAt: NOW - 15 * DAY })], // 15d past due, half the grace window
+      now: NOW,
+    });
+    expect(late.coverageAed).toBeLessThan(onTime.coverageAed);
+    expect(late.hf).toBeLessThan(onTime.hf);
+  });
+
+  it("unverified / defaulted receivables count for nothing → impaired", () => {
+    const h = advanceHealth({
+      outstandingAed: 200_000,
+      receivables: [rec({ status: "expected", attestationUid: undefined }), rec({ id: "r2", status: "defaulted" })],
+      now: NOW,
+    });
+    expect(h.coverageAed).toBe(0);
+    expect(h.band).toBe("impaired");
+    expect(h.action).toMatch(/draw the reserve/i);
+  });
+
+  it("a repaid advance has no exposure and infinite HF", () => {
+    const h = advanceHealth({ outstandingAed: 0, receivables: [], now: NOW });
+    expect(h.hf).toBe(Infinity);
+    expect(h.band).toBe("healthy");
+    expect(h.headline).toMatch(/repaid/i);
   });
 });

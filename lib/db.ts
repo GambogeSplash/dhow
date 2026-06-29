@@ -5,7 +5,7 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
  * Neon / Vercel Postgres connection. Lazy + cached so a missing DATABASE_URL
  * only throws when a request actually needs the database (not at import/build
  * time). This is the persistence backbone for real accounts — every business,
- * supplier and corridor lives here, scoped to the authenticated Privy user.
+ * supplier and payment lives here, scoped to the authenticated Privy user.
  */
 
 let _sql: NeonQueryFunction<false, false> | null = null;

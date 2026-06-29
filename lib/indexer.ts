@@ -4,22 +4,22 @@ import { ChainConfig, publicClient } from "./chain";
 
 /*
  * Thin chain indexer. Reads DhowEscrow events so the financier can see a
- * borrower's corridors derived from chain state (cross-machine), not from the
+ * borrower's payments derived from chain state (cross-machine), not from the
  * importer's localStorage. A short in-memory cache keeps demo-scale polling cheap.
  */
 
 const LOCKED = parseAbiItem(
-  "event Locked(bytes32 indexed corridorId, address indexed payer, address indexed supplier, uint256 amount, uint64 deadline)",
+  "event Locked(bytes32 indexed paymentId, address indexed payer, address indexed supplier, uint256 amount, uint64 deadline)",
 );
 const RELEASED = parseAbiItem(
-  "event Released(bytes32 indexed corridorId, address indexed supplier, uint256 amount, bytes32 attestationUid)",
+  "event Released(bytes32 indexed paymentId, address indexed supplier, uint256 amount, bytes32 attestationUid)",
 );
 const REFUNDED = parseAbiItem(
-  "event Refunded(bytes32 indexed corridorId, address indexed payer, uint256 amount)",
+  "event Refunded(bytes32 indexed paymentId, address indexed payer, uint256 amount)",
 );
 
-export interface ChainCorridor {
-  corridorId: Hex;
+export interface ChainPayment {
+  paymentId: Hex;
   payer: Hex;
   supplier: Hex;
   amountUsdc: number;
@@ -29,18 +29,18 @@ export interface ChainCorridor {
 
 interface CacheEntry {
   at: number;
-  corridors: ChainCorridor[];
+  payments: ChainPayment[];
 }
 
 const cache = new Map<string, CacheEntry>();
 const TTL_MS = 4000;
 
-export async function indexCorridors(cfg: ChainConfig, payer?: Hex): Promise<ChainCorridor[]> {
+export async function indexPayments(cfg: ChainConfig, payer?: Hex): Promise<ChainPayment[]> {
   const key = payer ?? "all";
   const hit = cache.get(key);
   // Date.now is fine on the server; only workflow scripts forbid it.
   const nowMs = Date.now();
-  if (hit && nowMs - hit.at < TTL_MS) return hit.corridors;
+  if (hit && nowMs - hit.at < TTL_MS) return hit.payments;
 
   const pub = publicClient(cfg);
   const [locked, released, refunded] = await Promise.all([
@@ -50,18 +50,18 @@ export async function indexCorridors(cfg: ChainConfig, payer?: Hex): Promise<Cha
   ]);
 
   const releasedById = new Map<string, Hex>();
-  for (const r of released) releasedById.set(r.args.corridorId as string, r.args.attestationUid as Hex);
-  const refundedIds = new Set(refunded.map((r) => r.args.corridorId as string));
+  for (const r of released) releasedById.set(r.args.paymentId as string, r.args.attestationUid as Hex);
+  const refundedIds = new Set(refunded.map((r) => r.args.paymentId as string));
 
-  const corridors: ChainCorridor[] = locked.map((l) => {
-    const id = l.args.corridorId as string;
-    const status: ChainCorridor["status"] = refundedIds.has(id)
+  const payments: ChainPayment[] = locked.map((l) => {
+    const id = l.args.paymentId as string;
+    const status: ChainPayment["status"] = refundedIds.has(id)
       ? "refunded"
       : releasedById.has(id)
         ? "released"
         : "locked";
     return {
-      corridorId: id as Hex,
+      paymentId: id as Hex,
       payer: l.args.payer as Hex,
       supplier: l.args.supplier as Hex,
       amountUsdc: Number(l.args.amount) / 1e6,
@@ -70,6 +70,6 @@ export async function indexCorridors(cfg: ChainConfig, payer?: Hex): Promise<Cha
     };
   });
 
-  cache.set(key, { at: nowMs, corridors });
-  return corridors;
+  cache.set(key, { at: nowMs, payments });
+  return payments;
 }

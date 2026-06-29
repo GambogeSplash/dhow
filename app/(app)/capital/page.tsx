@@ -3,14 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
 import { ChainBadge } from "@/components/ChainBadge";
 import { DealStatusPill, TermsSummary, TermsEditor, DealThread, pct } from "@/components/deal-ui";
-import { GradeBadge } from "@/components/score-viz";
-import { aed } from "@/lib/corridor";
-import type { Receivable } from "@/lib/credit";
+import { GradeBadge, HealthFactorMeter } from "@/components/score-viz";
+import { aed, advanceHealth, type Receivable } from "@/lib/credit";
 import {
   permissions,
   feeAed,
@@ -24,7 +23,7 @@ import { springPop, springSoft, rise, stagger, riseItem, press } from "@/lib/mot
 
 export default function CapitalPage() {
   const { score, credit, business, deals, maxAdvanceAed, dealAction, receivables, addReceivable, verifyReceivable } =
-    useCorridor();
+    useCredit();
   const { openAccept, openRequestCapital } = useOverlays();
 
   const now = Date.now();
@@ -76,7 +75,7 @@ export default function CapitalPage() {
           <p className="mt-4 font-medium">Not yet unlocked</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
             A working-capital line opens once your account clears the checks below. Keep settling
-            corridors on Dhow to build the record.
+            payments on Dhow to build the record.
           </p>
           <ul className="mx-auto mt-4 max-w-sm space-y-1.5 text-left">
             {credit.reasons.map((r, i) => (
@@ -87,7 +86,7 @@ export default function CapitalPage() {
             ))}
           </ul>
           <Link
-            href="/corridor"
+            href="/credit"
             className="mt-5 inline-block rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-paper"
           >
             View Cashflow Record →
@@ -104,7 +103,7 @@ export default function CapitalPage() {
         <h1 className="font-display text-3xl tracking-tight">Working capital</h1>
 
         {/* active facility */}
-        {facility && <FacilityCard deal={facility} now={now} busy={busy} onRepay={() => run(() => dealAction({ action: "repay", dealId: facility.id }))} business={business?.name} />}
+        {facility && <FacilityCard deal={facility} now={now} busy={busy} onRepay={() => run(() => dealAction({ action: "repay", dealId: facility.id }))} business={business?.name} receivables={receivables} reservePct={credit.structure.reservePct} />}
 
         {/* competing offers */}
         {request && bids.length > 0 && (
@@ -328,12 +327,16 @@ function FacilityCard({
   busy,
   onRepay,
   business,
+  receivables,
+  reservePct,
 }: {
   deal: Deal;
   now: number;
   busy: boolean;
   onRepay: () => void;
   business?: string;
+  receivables: Receivable[];
+  reservePct: number;
 }) {
   if (deal.status === "agreed") {
     return (
@@ -361,6 +364,17 @@ function FacilityCard({
           <TermsSummary terms={deal.terms} dueAt={deal.dueAt} now={now} />
         </div>
         <div className="px-6 py-5">
+          <div className="mb-3">
+            <HealthFactorMeter
+              health={advanceHealth({
+                outstandingAed: totalRepayableAed(deal.terms),
+                receivables,
+                reserveHeldAed: Math.round(deal.terms.amountAed * (reservePct / 100)),
+                dueAt: deal.dueAt,
+                now,
+              })}
+            />
+          </div>
           <div className="mb-3 flex items-center justify-between rounded-[var(--radius-card)] bg-surface-sunk px-4 py-3 text-sm">
             <span className="text-ink-3">Due in</span>
             <span className="tnum font-medium">{deal.dueAt ? Math.max(0, daysUntil(deal.dueAt, now)) : deal.terms.tenorDays} days</span>
@@ -392,7 +406,7 @@ function SingleNegotiation({
   maxAdvanceAed: number;
   busy: boolean;
   run: (fn: () => Promise<void>) => Promise<void>;
-  dealAction: ReturnType<typeof useCorridor>["dealAction"];
+  dealAction: ReturnType<typeof useCredit>["dealAction"];
   onAccept: (dealId: string) => void;
 }) {
   const [countering, setCountering] = useState(false);

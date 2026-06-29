@@ -6,7 +6,7 @@ import { useFinancier } from "@/components/FinancierProvider";
 import { Avatar } from "@/components/Avatar";
 import { DealStatusPill, pct } from "@/components/deal-ui";
 import { stagger, riseItem, rise } from "@/lib/motion";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { FINANCIER } from "@/lib/financier";
 import { totalRepayableAed, daysUntil } from "@/lib/deal";
 

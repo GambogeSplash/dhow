@@ -1,34 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Hex } from "viem";
 import { getChainConfig } from "@/lib/chain";
-import { indexCorridors } from "@/lib/indexer";
+import { indexPayments } from "@/lib/indexer";
 import { getUserId, privyConfigured } from "@/lib/privy-server";
 import { dbConfigured } from "@/lib/db";
-import { createCorridor, updateCorridor, type CorridorPatch } from "@/lib/store-server";
-import type { SettlementMode, SettlementStatus, TxState } from "@/lib/corridor";
+import { createPayment, updatePayment, type PaymentPatch } from "@/lib/store-server";
+import type { SettlementMode, SettlementStatus, TxState } from "@/lib/credit";
 import { cleanText, GOODS_MAX } from "@/lib/validate";
 
 export const runtime = "nodejs";
 
 /*
- * GET  — public chain-derived corridor feed (by payer address) from escrow
- *        events, so a financier can read a borrower's corridors cross-machine.
- * POST — create a corridor for the authenticated business after it has been
+ * GET  — public chain-derived payment feed (by payer address) from escrow
+ *        events, so a financier can read a borrower's payments cross-machine.
+ * POST — create a payment for the authenticated business after it has been
  *        signed on-chain by the user's own wallet.
- * PATCH — update a corridor's settlement lifecycle (status / txHash / proof).
+ * PATCH — update a payment's settlement lifecycle (status / txHash / proof).
  */
 
 export async function GET(req: NextRequest) {
   const payer = req.nextUrl.searchParams.get("payer");
   const cfg = getChainConfig();
-  if (!cfg) return NextResponse.json({ corridors: [] });
+  if (!cfg) return NextResponse.json({ payments: [] });
   try {
-    const corridors = await indexCorridors(cfg, payer ? (payer as Hex) : undefined);
-    return NextResponse.json({ corridors });
+    const payments = await indexPayments(cfg, payer ? (payer as Hex) : undefined);
+    return NextResponse.json({ payments });
   } catch (err) {
-    console.error("corridors index failed", err);
+    console.error("payments index failed", err);
     return NextResponse.json(
-      { corridors: [], error: err instanceof Error ? err.message : "chain error" },
+      { payments: [], error: err instanceof Error ? err.message : "chain error" },
       { status: 502 },
     );
   }
@@ -64,10 +64,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad json" }, { status: 400 });
   }
   if (!body.id || !body.ref || !body.supplierId || !body.mode || !body.status || !body.amountAed) {
-    return NextResponse.json({ error: "missing corridor fields" }, { status: 400 });
+    return NextResponse.json({ error: "missing payment fields" }, { status: 400 });
   }
 
-  await createCorridor(userId, {
+  await createPayment(userId, {
     id: body.id,
     ref: body.ref,
     supplierId: body.supplierId,
@@ -90,7 +90,7 @@ export async function PATCH(req: NextRequest) {
   const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  let body: { id?: string; patch?: CorridorPatch };
+  let body: { id?: string; patch?: PaymentPatch };
   try {
     body = await req.json();
   } catch {
@@ -98,6 +98,6 @@ export async function PATCH(req: NextRequest) {
   }
   if (!body.id || !body.patch) return NextResponse.json({ error: "missing id/patch" }, { status: 400 });
 
-  await updateCorridor(userId, body.id, body.patch);
+  await updatePayment(userId, body.id, body.patch);
   return NextResponse.json({ ok: true });
 }

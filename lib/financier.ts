@@ -1,4 +1,4 @@
-import type { Financier } from "./corridor";
+import type { Financier } from "./credit";
 
 /*
  * The financiers on the Dhow network — the demand side of the marketplace. A
@@ -17,7 +17,7 @@ export const FINANCIERS: Financier[] = [
   {
     id: "fin_dunes",
     name: "Dunes Trade Credit",
-    blurb: "Abu Dhabi trade-finance desk, fast on clean corridors.",
+    blurb: "Abu Dhabi trade-finance desk, fast on clean payments.",
     appetiteAed: 180_000,
   },
   {

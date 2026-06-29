@@ -18,7 +18,7 @@ import {
   MAX_TENOR_DAYS,
   TENOR_OPTIONS,
 } from "@/lib/deal";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 
 /*
  * Shared presentational pieces for the working-capital negotiation, used by both

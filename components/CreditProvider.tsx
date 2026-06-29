@@ -13,13 +13,13 @@ import { usePrivy, useWallets, getAccessToken } from "@privy-io/react-auth";
 import type { EIP1193Provider, Hex } from "viem";
 import {
   advanceOffer,
-  Corridor,
+  Payment,
   Counterparty,
-  CorridorScore,
-  makeCorridorUsdc,
-  scoreCorridors,
+  CreditScore,
+  makeUsdc,
+  creditScore,
   SettlementMode,
-} from "@/lib/corridor";
+} from "@/lib/credit";
 import { assessCredit, type CreditAssessment, type Receivable } from "@/lib/credit";
 import type { Business as BizForCredit } from "@/lib/account";
 import {
@@ -32,8 +32,8 @@ import {
   apiSetWallet,
   apiSetOfferAccepted,
   apiAddSupplier,
-  apiCreateCorridor,
-  apiPatchCorridor,
+  apiCreatePayment,
+  apiPatchPayment,
   apiCreateReceivable,
   apiVerifyReceivable,
   apiBorrowerDeals,
@@ -55,8 +55,8 @@ import {
   CHAIN_ID,
   payOpen,
   lockProoflock,
-  releaseCorridor,
-  refundCorridor,
+  releasePayment,
+  refundPayment,
 } from "@/lib/chain-client";
 import { FINANCIER } from "@/lib/financier";
 import { PREVIEW_MODE } from "@/lib/preview";
@@ -64,16 +64,16 @@ import {
   SEED_NOW,
   seedBusiness,
   seedSuppliers,
-  seedCorridors,
+  seedPayments,
   seedReceivables,
   seedImporterDeals,
   previewTx,
 } from "@/lib/preview-seed";
 
 /** Working-capital headroom a borrower can request, sized from their record. */
-function requestHeadroom(score: CorridorScore): number {
+function requestHeadroom(score: CreditScore): number {
   if (!score.eligible) return 0;
-  const base = score.avgCorridorAed * (score.tier === "preferred" ? 0.6 : 0.4);
+  const base = score.avgPaymentAed * (score.tier === "preferred" ? 0.6 : 0.4);
   return Math.max(5_000, Math.round(base / 1_000) * 1_000);
 }
 
@@ -82,7 +82,7 @@ function requestHeadroom(score: CorridorScore): number {
  *  wired client-side, so no counterparties are flagged here. */
 function creditFor(
   business: BizForCredit | null,
-  corridors: Corridor[],
+  payments: Payment[],
   receivables: Receivable[],
   now: number,
 ): CreditAssessment {
@@ -91,7 +91,7 @@ function creditFor(
       kybVerified: !!business,
       onboardedAt: business?.createdAt ?? now,
     },
-    corridors,
+    payments,
     receivables,
     now,
   });
@@ -167,9 +167,9 @@ interface WorkspaceState {
   }) => Supplier;
   signOut: () => void;
 
-  // corridors
-  corridors: Corridor[];
-  score: CorridorScore;
+  // payments
+  payments: Payment[];
+  score: CreditScore;
   credit: CreditAssessment;
   prevScore: number;
   offerAed: number;
@@ -185,13 +185,13 @@ interface WorkspaceState {
   }) => void;
   verifyReceivable: (id: string) => Promise<void>;
 
-  // corridor actions
+  // payment actions
   sendPayment: (input: {
     supplierId: string;
     goods: string;
     amountAed: number;
     mode: SettlementMode;
-  }) => Corridor | null;
+  }) => Payment | null;
   attest: (id: string) => void;
   refund: (id: string) => void;
   retry: (id: string) => void;
@@ -207,7 +207,7 @@ interface WorkspaceState {
   // a funded facility can be cleared from a fresh settlement: when the borrower
   // settles while a deal is funded, this prompt offers a one-tap repayment, so
   // "repaid from your next settlement" is a real action, not just copy.
-  repayPrompt: { dealId: string; financierName: string; amountAed: number; corridorRef: string } | null;
+  repayPrompt: { dealId: string; financierName: string; amountAed: number; paymentRef: string } | null;
   dismissRepayPrompt: () => void;
 
   // A freshly onboarded, empty account shows a labelled sample workspace (so the
@@ -217,14 +217,14 @@ interface WorkspaceState {
 }
 
 /** If a funded deal is outstanding, the settlement that just landed can clear it. */
-function fundedRepayPrompt(deals: Deal[], corridorRef: string) {
+function fundedRepayPrompt(deals: Deal[], paymentRef: string) {
   const funded = deals.find((d) => d.status === "funded");
   if (!funded) return null;
   return {
     dealId: funded.id,
     financierName: funded.financierName ?? "your financier",
     amountAed: totalRepayableAed(funded.terms),
-    corridorRef,
+    paymentRef,
   };
 }
 
@@ -245,8 +245,8 @@ async function postAttest(ref: string, supplier?: string): Promise<{ uid?: strin
   }
 }
 
-function nextRef(corridors: Corridor[]): string {
-  const nums = corridors
+function nextRef(payments: Payment[]): string {
+  const nums = payments
     .map((c) => parseInt(c.ref.replace(/\D/g, ""), 10))
     .filter((n) => !Number.isNaN(n));
   const max = nums.length ? Math.max(...nums) : 400;
@@ -261,33 +261,33 @@ function newSupplierId(): string {
   }
 }
 
-export function CorridorProvider({ children }: { children: React.ReactNode }) {
+export function CreditProvider({ children }: { children: React.ReactNode }) {
   return PREVIEW_MODE ? (
-    <CorridorPreview>{children}</CorridorPreview>
+    <PaymentPreview>{children}</PaymentPreview>
   ) : (
-    <CorridorLive>{children}</CorridorLive>
+    <PaymentLive>{children}</PaymentLive>
   );
 }
 
 /** Seeded, INTERACTIVE workspace for local preview (no Privy, no database). All
  *  actions mutate local state so every button works for a walkthrough; nothing
  *  is signed or persisted. Surfaces render fully populated and never redirect. */
-function CorridorPreview({ children }: { children: React.ReactNode }) {
+function PaymentPreview({ children }: { children: React.ReactNode }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>(seedSuppliers);
-  const [corridors, setCorridors] = useState<Corridor[]>(seedCorridors);
+  const [payments, setPayments] = useState<Payment[]>(seedPayments);
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [deals, setDeals] = useState<Deal[]>(seedImporterDeals);
   const [repayPrompt, setRepayPrompt] = useState<WorkspaceState["repayPrompt"]>(null);
   const dealsRef = useRef(deals);
   dealsRef.current = deals;
   const [prevScore, setPrevScore] = useState(() =>
-    Math.max(0, scoreCorridors(seedCorridors, SEED_NOW).score - 8),
+    Math.max(0, creditScore(seedPayments, SEED_NOW).score - 8),
   );
-  const corridorsRef = useRef(corridors);
-  corridorsRef.current = corridors;
+  const paymentsRef = useRef(payments);
+  paymentsRef.current = payments;
   const [receivables, setReceivables] = useState<Receivable[]>(seedReceivables);
-  const score = scoreCorridors(corridors, SEED_NOW);
-  const credit = creditFor(seedBusiness, corridors, receivables, SEED_NOW);
+  const score = creditScore(payments, SEED_NOW);
+  const credit = creditFor(seedBusiness, payments, receivables, SEED_NOW);
 
   // Receivables (preview): attestation is simulated locally — verifying flips an
   // expected claim to verified with a sim uid, which unlocks the secured line.
@@ -364,15 +364,15 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
     const supplier = suppliers.find((s) => s.id === input.supplierId);
     if (!supplier) return null;
     const settledNow = input.mode === "open";
-    const seq = 420 + corridors.filter((c) => c.ref.startsWith("DHW-")).length;
+    const seq = 420 + payments.filter((c) => c.ref.startsWith("DHW-")).length;
     const tx = previewTx();
-    const corridor: Corridor = {
+    const payment: Payment = {
       id: newId("dhw"),
       ref: `DHW-0${seq}`,
       supplier,
       goods: input.goods,
       amountAed: input.amountAed,
-      amountUsdc: makeCorridorUsdc(input.amountAed),
+      amountUsdc: makeUsdc(input.amountAed),
       mode: input.mode,
       status: settledNow ? "settled" : "locked",
       proof:
@@ -384,15 +384,15 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
       txState: "confirmed",
     };
     setPrevScore(score.score);
-    setCorridors((prev) => [corridor, ...prev]);
-    if (settledNow) setRepayPrompt(fundedRepayPrompt(dealsRef.current, corridor.ref));
-    return corridor;
+    setPayments((prev) => [payment, ...prev]);
+    if (settledNow) setRepayPrompt(fundedRepayPrompt(dealsRef.current, payment.ref));
+    return payment;
   };
 
   const attest: WorkspaceState["attest"] = (id) => {
-    setPrevScore(scoreCorridors(corridorsRef.current, SEED_NOW).score);
-    const target = corridorsRef.current.find((c) => c.id === id);
-    setCorridors((prev) =>
+    setPrevScore(creditScore(paymentsRef.current, SEED_NOW).score);
+    const target = paymentsRef.current.find((c) => c.id === id);
+    setPayments((prev) =>
       prev.map((c) =>
         c.id === id
           ? {
@@ -411,8 +411,8 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
   };
 
   const refund: WorkspaceState["refund"] = (id) => {
-    setPrevScore(scoreCorridors(corridorsRef.current, SEED_NOW).score);
-    setCorridors((prev) =>
+    setPrevScore(creditScore(paymentsRef.current, SEED_NOW).score);
+    setPayments((prev) =>
       prev.map((c) =>
         c.id === id
           ? {
@@ -427,7 +427,7 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
 
   const retry: WorkspaceState["retry"] = (id) => {
     const tx = previewTx();
-    setCorridors((prev) =>
+    setPayments((prev) =>
       prev.map((c) =>
         c.id === id
           ? {
@@ -455,7 +455,7 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
     saveBusiness: () => {},
     addSupplier,
     signOut: () => {},
-    corridors,
+    payments,
     score,
     credit,
     prevScore,
@@ -482,7 +482,7 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-function CorridorLive({ children }: { children: React.ReactNode }) {
+function PaymentLive({ children }: { children: React.ReactNode }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const [now] = useState(() => Date.now());
@@ -490,7 +490,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [business, setBusiness] = useState<Business | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [corridors, setCorridors] = useState<Corridor[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [prevScore, setPrevScore] = useState(0);
@@ -498,8 +498,8 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   const [repayPrompt, setRepayPrompt] = useState<WorkspaceState["repayPrompt"]>(null);
   const [sampleDismissed, setSampleDismissed] = useState(false);
 
-  const corridorsRef = useRef<Corridor[]>(corridors);
-  corridorsRef.current = corridors;
+  const paymentsRef = useRef<Payment[]>(payments);
+  paymentsRef.current = payments;
   const dealsRef = useRef<Deal[]>(deals);
   dealsRef.current = deals;
   const walletsRef = useRef(wallets);
@@ -515,8 +515,8 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   const applyRecord = useCallback((rec: AccountRecord) => {
     setBusiness(rec.business);
     setSuppliers(rec.suppliers);
-    setCorridors(rec.corridors);
-    corridorsRef.current = rec.corridors;
+    setPayments(rec.payments);
+    paymentsRef.current = rec.payments;
     setReceivables(rec.receivables ?? []);
     setOfferAccepted(rec.offerAccepted);
   }, []);
@@ -528,7 +528,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     if (!authenticated) {
       setBusiness(null);
       setSuppliers([]);
-      setCorridors([]);
+      setPayments([]);
       setOfferAccepted(false);
       setLoaded(true);
       return;
@@ -558,9 +558,9 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   }, [ready, authenticated, user?.id, wallets.length, applyRecord, user]);
 
   // Sample workspace: a fresh, onboarded, empty account sees seeded activity
-  // (suppliers + settled corridors + the resulting score) until it takes its
+  // (suppliers + settled payments + the resulting score) until it takes its
   // first real action. Dismissal persists per user so it never comes back.
-  const accountEmpty = isOnboarded && corridors.length === 0 && suppliers.length === 0;
+  const accountEmpty = isOnboarded && payments.length === 0 && suppliers.length === 0;
   const sampleMode = accountEmpty && !sampleDismissed;
 
   useEffect(() => {
@@ -584,17 +584,17 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   // Only the read-only views (settlement history + the score it produces) get the
   // sample overlay. Suppliers and deals stay real and empty, so the Send and
   // Request forms always operate on the user's own data, never sample rows.
-  const viewCorridors = sampleMode ? seedCorridors : corridors;
-  const realScore = useMemo(() => scoreCorridors(corridors, now), [corridors, now]);
+  const viewPayments = sampleMode ? seedPayments : payments;
+  const realScore = useMemo(() => creditScore(payments, now), [payments, now]);
   // Score the sample against its own reference instant so cadence reads fresh.
-  const score = sampleMode ? scoreCorridors(seedCorridors, SEED_NOW) : realScore;
+  const score = sampleMode ? creditScore(seedPayments, SEED_NOW) : realScore;
   const offerAed = useMemo(() => advanceOffer(score), [score]);
   const credit = useMemo(
     () =>
       sampleMode
-        ? creditFor(seedBusiness, seedCorridors, seedReceivables, SEED_NOW)
-        : creditFor(business, corridors, receivables, now),
-    [sampleMode, business, corridors, receivables, now],
+        ? creditFor(seedBusiness, seedPayments, seedReceivables, SEED_NOW)
+        : creditFor(business, payments, receivables, now),
+    [sampleMode, business, payments, receivables, now],
   );
 
   // Receivables (live): the inspector attests the obligation server-side (real
@@ -631,10 +631,10 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     [walletAddress],
   );
 
-  const patch = useCallback((id: string, fields: Partial<Corridor>) => {
-    setCorridors((prev) => {
+  const patch = useCallback((id: string, fields: Partial<Payment>) => {
+    setPayments((prev) => {
       const updated = prev.map((c) => (c.id === id ? { ...c, ...fields } : c));
-      corridorsRef.current = updated;
+      paymentsRef.current = updated;
       return updated;
     });
   }, []);
@@ -686,8 +686,8 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     void logout();
     setBusiness(null);
     setSuppliers([]);
-    setCorridors([]);
-    corridorsRef.current = [];
+    setPayments([]);
+    paymentsRef.current = [];
     setOfferAccepted(false);
     setPrevScore(0);
     setDeals([]);
@@ -705,7 +705,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     })();
   }, [authenticated, business, embedded?.address, token]);
 
-  // ---- corridor actions ----
+  // ---- payment actions ----
 
   const sendPayment = useCallback(
     (input: { supplierId: string; goods: string; amountAed: number; mode: SettlementMode }) => {
@@ -714,13 +714,13 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
 
       const t = Date.now();
       const settledImmediately = input.mode === "open";
-      const c: Corridor = {
+      const c: Payment = {
         id: `cor_${t}`,
-        ref: nextRef(corridorsRef.current),
+        ref: nextRef(paymentsRef.current),
         supplier,
         goods: input.goods,
         amountAed: input.amountAed,
-        amountUsdc: makeCorridorUsdc(input.amountAed),
+        amountUsdc: makeUsdc(input.amountAed),
         mode: input.mode,
         status: settledImmediately ? "settled" : "locked",
         settledAt: settledImmediately ? t : undefined,
@@ -729,10 +729,10 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
         txState: "pending",
       };
 
-      setPrevScore(scoreCorridors(corridorsRef.current, now).score);
-      setCorridors((prev) => {
+      setPrevScore(creditScore(paymentsRef.current, now).score);
+      setPayments((prev) => {
         const updated = [...prev, c];
-        corridorsRef.current = updated;
+        paymentsRef.current = updated;
         return updated;
       });
       if (settledImmediately) setRepayPrompt(fundedRepayPrompt(dealsRef.current, c.ref));
@@ -740,7 +740,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
       void (async () => {
         const tok = await token();
         if (tok) {
-          await apiCreateCorridor(tok, {
+          await apiCreatePayment(tok, {
             id: c.id,
             ref: c.ref,
             supplierId: supplier.id,
@@ -764,7 +764,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
             : await lockProoflock(provider, from, c.ref, supplier.walletAddress as Hex, c.amountUsdc);
           patch(c.id, { txHash: res.txHash, explorerUrl: res.explorerUrl, txState: "confirmed" });
           if (tok)
-            await apiPatchCorridor(tok, c.id, {
+            await apiPatchPayment(tok, c.id, {
               txHash: res.txHash,
               explorerUrl: res.explorerUrl,
               txState: "confirmed",
@@ -772,7 +772,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
         } catch (err) {
           console.error("settlement failed", err);
           patch(c.id, { txState: "failed" });
-          if (tok) await apiPatchCorridor(tok, c.id, { txState: "failed" }).catch(() => {});
+          if (tok) await apiPatchPayment(tok, c.id, { txState: "failed" }).catch(() => {});
         }
       })();
 
@@ -783,10 +783,10 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
 
   const attest = useCallback(
     (id: string) => {
-      const target = corridorsRef.current.find((c) => c.id === id);
+      const target = paymentsRef.current.find((c) => c.id === id);
       if (!target) return;
       const settledAt = Date.now();
-      setPrevScore(scoreCorridors(corridorsRef.current, now).score);
+      setPrevScore(creditScore(paymentsRef.current, now).score);
       setRepayPrompt(fundedRepayPrompt(dealsRef.current, target.ref));
       patch(id, {
         status: "settled",
@@ -802,7 +802,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
       void (async () => {
         const tok = await token();
         if (tok)
-          await apiPatchCorridor(tok, id, {
+          await apiPatchPayment(tok, id, {
             status: "settled",
             settledAt,
             txState: "pending",
@@ -817,10 +817,10 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
           const { uid } = await postAttest(target.ref, target.supplier.walletAddress);
           if (!uid) throw new Error("attestation unavailable");
           const { provider, from } = await signer();
-          const res = await releaseCorridor(provider, from, target.ref, uid as Hex);
+          const res = await releasePayment(provider, from, target.ref, uid as Hex);
           patch(id, { txHash: res.txHash, explorerUrl: res.explorerUrl, txState: "confirmed" });
           if (tok)
-            await apiPatchCorridor(tok, id, {
+            await apiPatchPayment(tok, id, {
               txHash: res.txHash,
               explorerUrl: res.explorerUrl,
               txState: "confirmed",
@@ -831,7 +831,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
         } catch (err) {
           console.error("release failed", err);
           patch(id, { txState: "failed" });
-          if (tok) await apiPatchCorridor(tok, id, { txState: "failed" }).catch(() => {});
+          if (tok) await apiPatchPayment(tok, id, { txState: "failed" }).catch(() => {});
         }
       })();
     },
@@ -840,9 +840,9 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
 
   const refund = useCallback(
     (id: string) => {
-      const target = corridorsRef.current.find((c) => c.id === id);
+      const target = paymentsRef.current.find((c) => c.id === id);
       if (!target) return;
-      setPrevScore(scoreCorridors(corridorsRef.current, now).score);
+      setPrevScore(creditScore(paymentsRef.current, now).score);
       patch(id, {
         status: "refunded",
         txHash: undefined,
@@ -853,7 +853,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
       void (async () => {
         const tok = await token();
         if (tok)
-          await apiPatchCorridor(tok, id, {
+          await apiPatchPayment(tok, id, {
             status: "refunded",
             txState: "pending",
             proofStatus: "failed",
@@ -862,10 +862,10 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
           }).catch(() => {});
         try {
           const { provider, from } = await signer();
-          const res = await refundCorridor(provider, from, target.ref);
+          const res = await refundPayment(provider, from, target.ref);
           patch(id, { txHash: res.txHash, explorerUrl: res.explorerUrl, txState: "confirmed" });
           if (tok)
-            await apiPatchCorridor(tok, id, {
+            await apiPatchPayment(tok, id, {
               txHash: res.txHash,
               explorerUrl: res.explorerUrl,
               txState: "confirmed",
@@ -873,7 +873,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
         } catch (err) {
           console.error("refund failed", err);
           patch(id, { txState: "failed" });
-          if (tok) await apiPatchCorridor(tok, id, { txState: "failed" }).catch(() => {});
+          if (tok) await apiPatchPayment(tok, id, { txState: "failed" }).catch(() => {});
         }
       })();
     },
@@ -882,7 +882,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
 
   const retry = useCallback(
     (id: string) => {
-      const c = corridorsRef.current.find((x) => x.id === id);
+      const c = paymentsRef.current.find((x) => x.id === id);
       if (!c) return;
       if (c.status === "refunded") return refund(id);
       if (c.status === "settled" && c.mode === "prooflock") return attest(id);
@@ -899,7 +899,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
               : await lockProoflock(provider, from, c.ref, c.supplier.walletAddress as Hex, c.amountUsdc);
           patch(id, { txHash: res.txHash, explorerUrl: res.explorerUrl, txState: "confirmed" });
           if (tok)
-            await apiPatchCorridor(tok, id, {
+            await apiPatchPayment(tok, id, {
               txHash: res.txHash,
               explorerUrl: res.explorerUrl,
               txState: "confirmed",
@@ -907,7 +907,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
         } catch (err) {
           console.error("retry failed", err);
           patch(id, { txState: "failed" });
-          if (tok) await apiPatchCorridor(tok, id, { txState: "failed" }).catch(() => {});
+          if (tok) await apiPatchPayment(tok, id, { txState: "failed" }).catch(() => {});
         }
       })();
     },
@@ -991,7 +991,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     saveBusiness,
     addSupplier,
     signOut,
-    corridors: viewCorridors,
+    payments: viewPayments,
     score,
     credit,
     prevScore,
@@ -1021,10 +1021,10 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
 
 export function useWorkspace(): WorkspaceState {
   const v = useContext(Ctx);
-  if (!v) throw new Error("useWorkspace must be used within CorridorProvider");
+  if (!v) throw new Error("useWorkspace must be used within CreditProvider");
   return v;
 }
 
 // Surface-facing aliases — same context, named for what each surface needs.
 export const useAccount = useWorkspace;
-export const useCorridor = useWorkspace;
+export const useCredit = useWorkspace;

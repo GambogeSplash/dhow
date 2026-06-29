@@ -67,7 +67,7 @@ That's the whole wedge.
 ### 2. The primitive — a verified on-chain cashflow record
 
 Because Dhow settled the payment, Dhow can prove it happened. Every settled
-corridor lifts a **Credit Score** — a *transparent function* of the payments we
+payment lifts a **Credit Score** — a *transparent function* of the payments we
 settled ourselves:
 
 - **Settled history** — how many real settlements
@@ -129,8 +129,8 @@ The payment is the wedge in three senses at once:
 | --- | --- |
 | **Settlement** | USDC on **Polygon (Amoy testnet today)**. `DhowEscrow` Proof-Lock contract (Foundry-tested), conditional release gated on a real **EAS** shipment-proof attestation. |
 | **Identity & wallet** | **Privy** — real login + a non-custodial embedded wallet per business. **The user signs their own settlements.** Dhow never holds their funds. |
-| **Credit record** | `DhowScoreRegistry` on-chain; the score is computed by a pure, auditable engine (`lib/corridor.ts`) from settled corridors and posted on-chain. |
-| **Data** | **Neon / Vercel Postgres** — businesses, suppliers, corridors. Per-user, server-authoritative, scoped to the authenticated Privy identity. |
+| **Credit record** | `DhowScoreRegistry` on-chain; the score is computed by a pure, auditable engine (`lib/credit.ts`) from settled payments and posted on-chain. |
+| **Data** | **Neon / Vercel Postgres** — businesses, suppliers, payments. Per-user, server-authoritative, scoped to the authenticated Privy identity. |
 | **App** | Next.js 16, server API routes for persistence, client-side signing via the user's embedded wallet. |
 
 ### The compliance perimeter, deliberately
@@ -158,7 +158,7 @@ The payment is the wedge in three senses at once:
 - **Mainnet** settlement with real USDC — gated behind a contract audit, real
   USDC liquidity, and KYC/compliance. Testnet first is the responsible default.
 - The **financier side** as a full product surface (today it reads the live
-  on-chain corridor feed and posted scores).
+  on-chain payment feed and posted scores).
 - Real inspector integrations for shipment proof (today a trusted attester key
   stands in for the inspector).
 - KYC/AML onboarding and a compliance workflow before any real-money corridor.

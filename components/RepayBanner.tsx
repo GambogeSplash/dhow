@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
-import { aed } from "@/lib/corridor";
+import { useCredit } from "@/components/CreditProvider";
+import { aed } from "@/lib/credit";
 import { springSoft, press } from "@/lib/motion";
 
 /*
@@ -13,7 +13,7 @@ import { springSoft, press } from "@/lib/motion";
  * "you keep settling on Dhow, the facility repays itself" becomes a real action.
  */
 export function RepayBanner() {
-  const { repayPrompt, dealAction, dismissRepayPrompt } = useCorridor();
+  const { repayPrompt, dealAction, dismissRepayPrompt } = useCredit();
   const [busy, setBusy] = useState(false);
 
   async function repay() {
@@ -39,7 +39,7 @@ export function RepayBanner() {
         >
           <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-3">
             <p className="text-sm text-brass-deep">
-              <span className="font-medium">{repayPrompt.corridorRef} settled.</span> Clear your{" "}
+              <span className="font-medium">{repayPrompt.paymentRef} settled.</span> Clear your{" "}
               {aed(repayPrompt.amountAed)} facility with {repayPrompt.financierName} from this settlement?
             </p>
             <div className="flex items-center gap-2">

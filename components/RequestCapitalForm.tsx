@@ -1,18 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { TermsEditor } from "@/components/deal-ui";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { DEFAULT_RATE_PCT, DEFAULT_TENOR_DAYS, type DealTerms } from "@/lib/deal";
 
 /*
  * Request working capital. A focused modal: set the amount and term, and the
  * request fans out to every financier on Dhow to bid on. Sized to the borrower's
- * settled corridors (their headroom).
+ * settled payments (their headroom).
  */
 export function RequestCapitalForm({ onClose }: { onClose: () => void }) {
-  const { score, maxAdvanceAed, requestCapital } = useCorridor();
+  const { score, maxAdvanceAed, requestCapital } = useCredit();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -41,7 +41,7 @@ export function RequestCapitalForm({ onClose }: { onClose: () => void }) {
       </div>
       <TermsEditor
         initial={{
-          amountAed: Math.min(maxAdvanceAed, Math.round(score.avgCorridorAed * 0.3) || 10_000),
+          amountAed: Math.min(maxAdvanceAed, Math.round(score.avgPaymentAed * 0.3) || 10_000),
           ratePct: DEFAULT_RATE_PCT,
           tenorDays: DEFAULT_TENOR_DAYS,
         }}

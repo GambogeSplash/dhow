@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import {
   aed,
-  Corridor,
+  Payment,
   ELIGIBLE_THRESHOLD,
   ScoreFactor,
   usdcLabel,
-} from "@/lib/corridor";
+} from "@/lib/credit";
 
-export default function CorridorPage() {
-  const { corridors, score, prevScore, retry, offerAed } = useCorridor();
+export default function CashflowPage() {
+  const { payments, score, prevScore, retry, offerAed } = useCredit();
   const { openAttest, openRefund } = useOverlays();
   const crossedNow = prevScore < ELIGIBLE_THRESHOLD && score.eligible;
 
@@ -35,7 +35,7 @@ export default function CorridorPage() {
     return () => clearTimeout(t);
   }, [score]);
 
-  const ledger = [...corridors].sort(
+  const ledger = [...payments].sort(
     (a, b) => (b.settledAt ?? b.createdAt) - (a.settledAt ?? a.createdAt),
   );
 
@@ -194,7 +194,7 @@ function LedgerRow({
   onRefund,
   onRetry,
 }: {
-  c: Corridor;
+  c: Payment;
   onAttest: () => void;
   onRefund: () => void;
   onRetry: () => void;
@@ -304,7 +304,7 @@ function TxLink({
   );
 }
 
-function StatusPill({ c }: { c: Corridor }) {
+function StatusPill({ c }: { c: Payment }) {
   if (c.status === "locked")
     return (
       <span className="rounded-full bg-pending-tint px-2 py-0.5 text-[11px] font-medium text-brass-deep">

@@ -9,7 +9,7 @@ import {IEAS} from "./interfaces/IEAS.sol";
 import {IDhowScoreRegistry} from "./interfaces/IDhowScoreRegistry.sol";
 
 /// @title DhowEscrow — Proof-Lock conditional settlement.
-/// @notice Holds USDC for a corridor and releases to the supplier when the
+/// @notice Holds USDC for a payment and releases to the supplier when the
 ///         shipment proof is attested. The release is gated on a real EAS
 ///         attestation signed by a trusted inspector: the attestation IS the
 ///         authorisation, so release is permissionless once one exists. A
@@ -21,7 +21,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
-    error DhowEscrow__CorridorExists();
+    error DhowEscrow__PaymentExists();
     error DhowEscrow__InvalidSupplier();
     error DhowEscrow__InvalidAmount();
     error DhowEscrow__NotLocked();
@@ -32,7 +32,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     error DhowEscrow__AttestationRevoked();
     error DhowEscrow__AttestationExpired();
     error DhowEscrow__WrongAttester();
-    error DhowEscrow__CorridorMismatch();
+    error DhowEscrow__PaymentMismatch();
     error DhowEscrow__InvalidInspector();
 
     /*//////////////////////////////////////////////////////////////
@@ -73,22 +73,22 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     ///         release/refund (it is wrapped in try/catch).
     IDhowScoreRegistry public registry;
 
-    mapping(bytes32 corridorId => Lock) public locks;
+    mapping(bytes32 paymentId => Lock) public locks;
 
     /*/////////////////////////////////////////////////////////
                             EVENTS
     /////////////////////////////////////////////////////////*/
     event Locked(
-        bytes32 indexed corridorId, address indexed payer, address indexed supplier, uint256 amount, uint64 deadline
+        bytes32 indexed paymentId, address indexed payer, address indexed supplier, uint256 amount, uint64 deadline
     );
-    event Released(bytes32 indexed corridorId, address indexed supplier, uint256 amount, bytes32 attestationUid);
-    event Refunded(bytes32 indexed corridorId, address indexed payer, uint256 amount);
+    event Released(bytes32 indexed paymentId, address indexed supplier, uint256 amount, bytes32 attestationUid);
+    event Refunded(bytes32 indexed paymentId, address indexed payer, uint256 amount);
     event InspectorChanged(address indexed inspector);
     event RequireEasChanged(bool requireEas);
     event RegistryChanged(address indexed registry);
     /// @notice Emitted when settlement succeeded but the registry notification
     ///         reverted. Money moved; only the reputation write was skipped.
-    event SettlementRecordFailed(bytes32 indexed corridorId, address indexed business, bool success);
+    event SettlementRecordFailed(bytes32 indexed paymentId, address indexed business, bool success);
 
     /*/////////////////////////////////////////////////////////
                             CONSTRUCTOR
@@ -130,48 +130,48 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         emit RequireEasChanged(requireEas_);
     }
 
-    /// @notice Lock funds for a corridor. Payer must have approved this contract.
-    function lock(bytes32 corridorId, address supplier, uint256 amount, uint64 deadline) external nonReentrant {
-        _lock(corridorId, supplier, amount, deadline);
+    /// @notice Lock funds for a payment. Payer must have approved this contract.
+    function lock(bytes32 paymentId, address supplier, uint256 amount, uint64 deadline) external nonReentrant {
+        _lock(paymentId, supplier, amount, deadline);
     }
 
     /// @notice Release funds against a real EAS shipment-proof attestation.
     ///         Permissionless: the attestation is the authorisation. Verifies
     ///         the attestation is the right schema, not revoked, not expired,
-    ///         signed by the trusted inspector, and bound to this corridor.
-    function releaseWithAttestation(bytes32 corridorId, bytes32 attestationUid) external nonReentrant {
-        _releaseWithAttestation(corridorId, attestationUid);
+    ///         signed by the trusted inspector, and bound to this payment.
+    function releaseWithAttestation(bytes32 paymentId, bytes32 attestationUid) external nonReentrant {
+        _releaseWithAttestation(paymentId, attestationUid);
     }
 
     /// @notice Fallback release by the trusted inspector, available only when
     ///         the owner has turned `requireEas` off (EAS unavailable). Still a
     ///         real on-chain release; identical settlement, weaker proof trail.
-    function releaseByInspector(bytes32 corridorId, bytes32 proofRef) external nonReentrant {
-        _release(corridorId, proofRef);
+    function releaseByInspector(bytes32 paymentId, bytes32 proofRef) external nonReentrant {
+        _release(paymentId, proofRef);
     }
 
     /// @notice Refund the payer after the deadline if no proof was attested.
-    function refund(bytes32 corridorId) external nonReentrant {
-        _refund(corridorId);
+    function refund(bytes32 paymentId) external nonReentrant {
+        _refund(paymentId);
     }
 
     /*////////////////////////////////////////////////////////////////
                         INTERNAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-    function _lock(bytes32 corridorId, address supplier, uint256 amount, uint64 deadline) internal {
-        if (locks[corridorId].status != Status.None) revert DhowEscrow__CorridorExists();
+    function _lock(bytes32 paymentId, address supplier, uint256 amount, uint64 deadline) internal {
+        if (locks[paymentId].status != Status.None) revert DhowEscrow__PaymentExists();
         if (supplier == address(0)) revert DhowEscrow__InvalidSupplier();
         if (amount == 0) revert DhowEscrow__InvalidAmount();
 
-        locks[corridorId] =
+        locks[paymentId] =
             Lock({payer: msg.sender, supplier: supplier, amount: amount, deadline: deadline, status: Status.Locked});
 
         I_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
-        emit Locked(corridorId, msg.sender, supplier, amount, deadline);
+        emit Locked(paymentId, msg.sender, supplier, amount, deadline);
     }
 
-    function _releaseWithAttestation(bytes32 corridorId, bytes32 attestationUid) internal {
+    function _releaseWithAttestation(bytes32 paymentId, bytes32 attestationUid) internal {
         if (!requireEas) revert DhowEscrow__EasRequired(); // when EAS is off, use releaseByInspector
 
         IEAS.Attestation memory att = I_EAS.getAttestation(attestationUid);
@@ -180,54 +180,54 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         if (att.expirationTime != 0 && att.expirationTime <= block.timestamp) revert DhowEscrow__AttestationExpired();
         if (att.attester != inspector) revert DhowEscrow__WrongAttester();
 
-        // The schema leads with the corridorId (static bytes32), so decoding the
-        // prefix binds the attestation to this corridor and blocks replay.
-        bytes32 attestedCorridor = abi.decode(att.data, (bytes32));
-        if (attestedCorridor != corridorId) revert DhowEscrow__CorridorMismatch();
+        // The schema leads with the paymentId (static bytes32), so decoding the
+        // prefix binds the attestation to this payment and blocks replay.
+        bytes32 attestedPayment = abi.decode(att.data, (bytes32));
+        if (attestedPayment != paymentId) revert DhowEscrow__PaymentMismatch();
 
-        _settle(corridorId, attestationUid);
+        _settle(paymentId, attestationUid);
     }
 
     /// @dev Inspector fallback path, gated on EAS being turned off. The release
     ///      itself is performed by the shared `_settle` core.
-    function _release(bytes32 corridorId, bytes32 proofRef) internal {
+    function _release(bytes32 paymentId, bytes32 proofRef) internal {
         if (requireEas) revert DhowEscrow__EasRequired();
         if (msg.sender != inspector) revert DhowEscrow__NotInspector();
-        _settle(corridorId, proofRef);
+        _settle(paymentId, proofRef);
     }
 
     /// @dev The settlement core, shared by the attestation and inspector paths.
     ///      Moves the money, then records the settlement fact on-chain in the
     ///      same transaction. The release-path guards live in the callers, so
     ///      this never carries a contradictory `requireEas` condition.
-    function _settle(bytes32 corridorId, bytes32 attestationUid) internal {
-        Lock storage l = locks[corridorId];
+    function _settle(bytes32 paymentId, bytes32 attestationUid) internal {
+        Lock storage l = locks[paymentId];
         if (l.status != Status.Locked) revert DhowEscrow__NotLocked();
 
         l.status = Status.Released;
         I_TOKEN.safeTransfer(l.supplier, l.amount);
 
-        emit Released(corridorId, l.supplier, l.amount, attestationUid);
-        _recordSettlement(corridorId, l.payer, l.amount, true, attestationUid);
+        emit Released(paymentId, l.supplier, l.amount, attestationUid);
+        _recordSettlement(paymentId, l.payer, l.amount, true, attestationUid);
     }
 
-    function _refund(bytes32 corridorId) internal {
-        Lock storage l = locks[corridorId];
+    function _refund(bytes32 paymentId) internal {
+        Lock storage l = locks[paymentId];
         if (l.status != Status.Locked) revert DhowEscrow__NotLocked();
         if (block.timestamp <= l.deadline) revert DhowEscrow__NotExpired();
 
         l.status = Status.Refunded;
         I_TOKEN.safeTransfer(l.payer, l.amount);
 
-        emit Refunded(corridorId, l.payer, l.amount);
-        _recordSettlement(corridorId, l.payer, l.amount, false, bytes32(0));
+        emit Refunded(paymentId, l.payer, l.amount);
+        _recordSettlement(paymentId, l.payer, l.amount, false, bytes32(0));
     }
 
     /// @dev Notify the on-chain registry of a settlement. Wrapped in try/catch so
     ///      a misconfigured or paused registry can never block the money moving;
     ///      a failed notification surfaces as an event for off-chain repair.
     function _recordSettlement(
-        bytes32 corridorId,
+        bytes32 paymentId,
         address business,
         uint256 amount,
         bool success,
@@ -237,14 +237,14 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         if (address(r) == address(0)) return;
         try r.recordSettlement(business, amount, success, attestationUid) {}
         catch {
-            emit SettlementRecordFailed(corridorId, business, success);
+            emit SettlementRecordFailed(paymentId, business, success);
         }
     }
     /*//////////////////////////////////////////////////////////////
                     EXTERNAL VIEW & PURE FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-    function getLock(bytes32 corridorId) external view returns (Lock memory) {
-        return locks[corridorId];
+    function getLock(bytes32 paymentId) external view returns (Lock memory) {
+        return locks[paymentId];
     }
 
     function getInspector() external view returns (address) {

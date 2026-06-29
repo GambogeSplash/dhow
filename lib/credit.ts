@@ -1,10 +1,13 @@
 /*
- * Dhow credit model — v2
- * ======================
- * The v1 score (lib/corridor.ts) is a single 0–100 reputation number. That
- * conflates three different underwriting questions and can be gamed by paying
- * yourself. This module replaces it with the decomposition a real trade-finance
- * risk team uses — Expected Loss = PD × LGD × EAD — expressed as five layers:
+ * Dhow credit model
+ * =================
+ * One credit system, two layers. The first is a behaviour score (`creditScore`,
+ * in the domain foundation below): a single 0–100 reputation number from settled
+ * payments, mirrored on-chain. On its own that conflates three different
+ * underwriting questions and can be gamed by paying yourself, so the second
+ * layer (`assessCredit`) consumes it as a character signal and decides the line
+ * with the decomposition a real trade-finance risk team uses — Expected Loss =
+ * PD × LGD × EAD — expressed as five layers:
  *
  *   1. GATES      binary knockouts (KYB, tenure, counterparty independence)
  *   2. GRADE      a PD proxy: behaviour + cashflow → grade A–E → expected default
@@ -25,7 +28,231 @@
  * `now`, so a financier can recompute it independently.
  */
 
-import { AED_PER_USD, type Corridor, type Counterparty } from "./corridor";
+// ===========================================================================
+// Domain foundation
+// ---------------------------------------------------------------------------
+// The payment primitive, currency utilities, and the behaviour score. A
+// Credit Score is a transparent function of REAL settled payments. Pure and
+// chain-agnostic; the Polygon settlement layer swaps in at the edges (txHash).
+// ===========================================================================
+
+export const AED_PER_USD = 3.6725; // CBUAE peg, fixed
+
+export type SettlementMode = "open" | "prooflock";
+
+export type SettlementStatus =
+  | "draft" // composed, not yet sent
+  | "locked" // prooflock: funds escrowed, awaiting proof
+  | "settled" // released to supplier, on-chain confirmed
+  | "refunded"; // prooflock: timed out / disputed, returned to buyer
+
+export type ProofStatus = "awaiting" | "attested" | "failed";
+
+/** On-chain write lifecycle for a payment's settlement action. "confirmed"
+ *  means the user's signed transaction was mined; "failed" is reached when the
+ *  signing/broadcast fails, and a failed write never counts toward the score. */
+export type TxState = "pending" | "confirmed" | "failed";
+
+export interface Counterparty {
+  id: string;
+  name: string;
+  city: string;
+  country: string;
+  walletAddress?: string; // on-chain address settlements are sent to
+}
+
+export interface Payment {
+  id: string;
+  ref: string; // human ref, e.g. DHW-0412
+  supplier: Counterparty;
+  goods: string;
+  amountAed: number;
+  amountUsdc: number; // amountAed / AED_PER_USD
+  mode: SettlementMode;
+  status: SettlementStatus;
+  proof?: {
+    status: ProofStatus;
+    label: string; // e.g. "Bill of lading — Jebel Ali inbound"
+    attestedBy?: string;
+  };
+  createdAt: number; // ms epoch
+  settledAt?: number;
+  txHash?: string; // real Amoy tx hash when wired, synthetic when simulated
+  explorerUrl?: string; // polygonscan link when on-chain
+  txState?: TxState; // settlement write lifecycle
+}
+
+export interface Importer {
+  id: string;
+  name: string;
+  city: string;
+  country: string;
+  walletPreview: string;
+}
+
+export interface Financier {
+  id: string;
+  name: string;
+  blurb: string;
+  appetiteAed: number; // max single facility
+}
+
+export type ScoreTier = "establishing" | "eligible" | "preferred";
+
+export interface ScoreFactor {
+  key: "history" | "volume" | "performance" | "cadence";
+  label: string;
+  detail: string;
+  points: number; // earned
+  max: number;
+}
+
+export interface CreditScore {
+  score: number; // 0..100
+  tier: ScoreTier;
+  eligible: boolean;
+  factors: ScoreFactor[];
+  settledCount: number;
+  trailingValueAed: number; // settled value, trailing window
+  avgPaymentAed: number;
+  proofMetRatio: number;
+}
+
+export const ELIGIBLE_THRESHOLD = 70;
+export const PREFERRED_THRESHOLD = 88;
+
+function usdc(amountAed: number): number {
+  return Math.round((amountAed / AED_PER_USD) * 100) / 100;
+}
+
+export function makeUsdc(amountAed: number): number {
+  return usdc(amountAed);
+}
+
+/**
+ * Behaviour score — built only from SETTLED payments, each factor independently
+ * legible so the UI can show the derivation. This is the character signal that
+ * feeds the grade in `assessCredit`, not the whole underwrite. Also mirrored
+ * on-chain in DhowScoreRegistry.
+ */
+export function creditScore(
+  payments: Payment[],
+  now: number = Date.now(),
+): CreditScore {
+  // A settlement whose on-chain write failed is not creditworthy evidence.
+  const settled = payments.filter(
+    (c) => c.status === "settled" && c.txState !== "failed",
+  );
+  const settledCount = settled.length;
+  const trailingValueAed = settled.reduce((s, c) => s + c.amountAed, 0);
+  const avgPaymentAed = settledCount ? trailingValueAed / settledCount : 0;
+
+  // performance: of prooflocks, how many released cleanly (settled) vs refunded
+  const prooflocks = payments.filter((c) => c.mode === "prooflock");
+  const prooflockResolved = prooflocks.filter(
+    (c) => c.status === "settled" || c.status === "refunded",
+  );
+  const prooflockClean = prooflocks.filter((c) => c.status === "settled");
+  const proofMetRatio = prooflockResolved.length
+    ? prooflockClean.length / prooflockResolved.length
+    : 1; // no prooflocks yet → no negative signal
+
+  // recency / cadence: reward recent settlement against real elapsed time
+  const lastSettledAt = settled.length
+    ? Math.max(...settled.map((c) => c.settledAt ?? 0))
+    : 0;
+  const daysSinceLast = settled.length
+    ? Math.max(0, (now - lastSettledAt) / 86_400_000)
+    : 999;
+  const cadence = settled.length >= 2 ? clamp01(1 - daysSinceLast / 45) : settled.length / 2;
+
+  const factors: ScoreFactor[] = [
+    {
+      key: "history",
+      label: "Settled history",
+      detail: `${settledCount} settlement${settledCount === 1 ? "" : "s"}`,
+      points: round1((Math.min(settledCount, 6) / 6) * 30),
+      max: 30,
+    },
+    {
+      key: "volume",
+      label: "Trailing volume",
+      detail: aed(trailingValueAed),
+      points: round1(clamp01(trailingValueAed / 1_000_000) * 25),
+      max: 25,
+    },
+    {
+      key: "performance",
+      label: "Proof performance",
+      detail: prooflockResolved.length
+        ? `${prooflockClean.length}/${prooflockResolved.length} released clean`
+        : settledCount
+          ? "no disputes"
+          : "—",
+      // Clean-performance points are EARNED by settling at least once. A brand-new
+      // business with no settlements has no track record, so it scores 0 here
+      // rather than getting full marks for the absence of disputes.
+      points: round1((settledCount > 0 ? proofMetRatio : 0) * 30),
+      max: 30,
+    },
+    {
+      key: "cadence",
+      label: "Cadence",
+      detail: settledCount ? `${Math.round(daysSinceLast)}d since last` : "—",
+      points: round1(cadence * 15),
+      max: 15,
+    },
+  ];
+
+  const score = Math.round(factors.reduce((s, fac) => s + fac.points, 0));
+  const tier: ScoreTier =
+    score >= PREFERRED_THRESHOLD
+      ? "preferred"
+      : score >= ELIGIBLE_THRESHOLD
+        ? "eligible"
+        : "establishing";
+
+  return {
+    score,
+    tier,
+    eligible: score >= ELIGIBLE_THRESHOLD,
+    factors,
+    settledCount,
+    trailingValueAed,
+    avgPaymentAed,
+    proofMetRatio,
+  };
+}
+
+/**
+ * Working-capital advance sized to bridge one typical shipment's cash gap.
+ * A fraction of the average settlement, scaled by score tier. Capital-light:
+ * Dhow surfaces this to a financier; it does not lend its own balance sheet.
+ */
+export function advanceOffer(s: CreditScore): number {
+  if (!s.eligible) return 0;
+  const rate = s.tier === "preferred" ? 0.2 : 0.15;
+  const raw = s.avgPaymentAed * rate;
+  return Math.max(0, Math.round(raw / 1000) * 1000); // round to nearest AED 1,000
+}
+
+// ---- formatting helpers ----
+
+export function aed(n: number): string {
+  return `AED ${Math.round(n).toLocaleString("en-US")}`;
+}
+
+export function usdcLabel(n: number): string {
+  return `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+// ===========================================================================
+// Credit assessment — the underwriting decision built on the foundation above.
+// ===========================================================================
 
 // ---------------------------------------------------------------------------
 // Inputs
@@ -56,7 +283,7 @@ export interface BusinessProfile {
 
 export interface CreditInput {
   profile: BusinessProfile;
-  corridors: Corridor[];
+  payments: Payment[];
   receivables?: Receivable[];
   now?: number;
 }
@@ -155,6 +382,15 @@ const LGD_UNSECURED = 0.85;
 // Pricing: base covers cost-of-capital + ops + margin; risk premium = EL.
 const APR_BASE_PCT = 8;
 
+// Health factor — runtime coverage on a LIVE advance. Banding mirrors the
+// remediation ladder: open conservative, escalate as coverage decays. Unlike a
+// DeFi health factor, HF < 1 does not auto-liquidate (receivables are illiquid)
+// — it triggers a workflow, so the floor is a flag, not a seizure.
+const HF_HEALTHY = 1.3; // ≥ this: on track
+const HF_WATCH = 1.15; // ≥ this: monitor, hold new advances
+const HF_FLOOR = 1.0; // ≥ this: tight; below: impaired
+const OVERDUE_GRACE_DAYS = 30; // a past-due receivable decays to zero coverage over this
+
 // ---------------------------------------------------------------------------
 // The model
 // ---------------------------------------------------------------------------
@@ -163,15 +399,15 @@ export function assessCredit(input: CreditInput): CreditAssessment {
   const now = input.now ?? Date.now();
   const linked = new Set(input.profile.linkedCounterpartyIds ?? []);
 
-  // Arm's-length settled corridors only: drop failed writes AND any settlement
+  // Arm's-length settled payments only: drop failed writes AND any settlement
   // to an ownership-linked counterparty (self-dealing earns no credit).
-  const settled = input.corridors.filter(
+  const settled = input.payments.filter(
     (c) =>
       c.status === "settled" &&
       c.txState !== "failed" &&
       !linked.has(c.supplier.id),
   );
-  const refunded = input.corridors.filter((c) => c.status === "refunded");
+  const refunded = input.payments.filter((c) => c.status === "refunded");
 
   // ---- shared aggregates -------------------------------------------------
   const settledCount = settled.length;
@@ -191,7 +427,7 @@ export function assessCredit(input: CreditInput): CreditAssessment {
   if (distinctCounterparties < ELIGIBLE_MIN_COUNTERPARTIES)
     gateFailures.push("too_few_counterparties");
   // Circular flow: any settlement routed to a linked wallet is a hard stop.
-  if (input.corridors.some((c) => c.status === "settled" && linked.has(c.supplier.id)))
+  if (input.payments.some((c) => c.status === "settled" && linked.has(c.supplier.id)))
     gateFailures.push("circular_fund_flow");
   if (input.profile.inActiveDefault) gateFailures.push("active_default");
   const eligible = gateFailures.length === 0;
@@ -295,12 +531,126 @@ export function assessCredit(input: CreditInput): CreditAssessment {
 }
 
 // ---------------------------------------------------------------------------
+// Health factor — runtime coverage on a live advance
+// ---------------------------------------------------------------------------
+// `assessCredit` underwrites a deal at ORIGINATION. Once money is out, nothing
+// there tells you the position is decaying. The health factor is that missing
+// runtime monitor: a single coverage ratio that updates as receivables are
+// attested, collected, default, or fall overdue — recomputable by a financier
+// from the same public facts.
+
+export type HealthBand = "healthy" | "watch" | "tight" | "impaired";
+
+export interface AdvanceHealthInput {
+  /** What is still owed on the advance (principal + accrued fee) — the EAD. */
+  outstandingAed: number;
+  /** Receivables backing this advance. Only verified ones secure it; the rest
+   *  are informational, exactly as in the limit calc. */
+  receivables?: Receivable[];
+  /** Holdback already captured by the financier — counts toward coverage. */
+  reserveHeldAed?: number;
+  /** When the advance itself is due. Past it, the position is overdue (a flag,
+   *  not part of the ratio). */
+  dueAt?: number;
+  now?: number;
+}
+
+export interface HealthContribution {
+  receivableId: string;
+  debtor: string;
+  faceAed: number;
+  countedAed: number; // face after advance-rate + overdue haircuts
+  haircutPct: number; // 1 - counted/face, as a percentage
+  note: string;
+}
+
+export interface AdvanceHealth {
+  /** Coverage ÷ exposure. `Infinity` when nothing is outstanding (repaid). */
+  hf: number;
+  band: HealthBand;
+  exposureAed: number;
+  coverageAed: number; // discounted receivables + reserve held
+  reserveAed: number;
+  overdueDays: number; // how late the advance itself is (0 if not due/early)
+  contributions: HealthContribution[];
+  /** The remediation step for this band — the workflow, not a liquidation. */
+  action: string;
+  headline: string;
+}
+
+/** Coverage ratio on a live advance. Pure: a function of the facts + `now`, so a
+ *  financier recomputes it independently. HF < 1 escalates a workflow (pause →
+ *  tighten sweep → draw reserve), it does not seize — receivables are illiquid. */
+export function advanceHealth(input: AdvanceHealthInput): AdvanceHealth {
+  const now = input.now ?? Date.now();
+  const exposureAed = Math.max(0, Math.round(input.outstandingAed));
+  const reserveAed = Math.max(0, Math.round(input.reserveHeldAed ?? 0));
+
+  const contributions: HealthContribution[] = [];
+  let receivableCoverage = 0;
+  for (const r of input.receivables ?? []) {
+    // Only a verified, on-chain-attested receivable secures the advance. Others
+    // are informational (collected ⇒ already swept; defaulted ⇒ worth nothing).
+    const secures = r.status === "verified" && !!r.attestationUid;
+    const overdueDays = Math.max(0, (now - r.dueAt) / 86_400_000);
+    const overdueFactor = clamp01(1 - overdueDays / OVERDUE_GRACE_DAYS);
+    const counted = secures ? r.amountAed * RECEIVABLE_ADVANCE_RATE * overdueFactor : 0;
+    receivableCoverage += counted;
+    contributions.push({
+      receivableId: r.id,
+      debtor: r.debtor.name,
+      faceAed: Math.round(r.amountAed),
+      countedAed: Math.round(counted),
+      haircutPct: r.amountAed > 0 ? roundTo((1 - counted / r.amountAed) * 100, 1) : 100,
+      note: !secures
+        ? r.status === "defaulted"
+          ? "defaulted — no value"
+          : r.status === "collected"
+            ? "collected — already swept"
+            : "unverified — not counted"
+        : overdueDays > 0
+          ? `${Math.round(overdueDays)}d overdue — discounted`
+          : "verified · advance-rate haircut",
+    });
+  }
+
+  const coverageAed = Math.round(receivableCoverage + reserveAed);
+  const hf = exposureAed > 0 ? coverageAed / exposureAed : Infinity;
+  const overdueDays =
+    input.dueAt && now > input.dueAt ? Math.round((now - input.dueAt) / 86_400_000) : 0;
+
+  const band: HealthBand =
+    hf >= HF_HEALTHY ? "healthy" : hf >= HF_WATCH ? "watch" : hf >= HF_FLOOR ? "tight" : "impaired";
+
+  return {
+    hf,
+    band,
+    exposureAed,
+    coverageAed,
+    reserveAed,
+    overdueDays,
+    contributions,
+    action: healthAction(band, overdueDays),
+    headline: exposureAed === 0 ? "Repaid — no exposure" : `${hf.toFixed(2)}× covered`,
+  };
+}
+
+function healthAction(band: HealthBand, overdueDays: number): string {
+  if (band === "impaired")
+    return "Coverage below 1.0× — draw the reserve and flag the financier.";
+  if (band === "tight")
+    return "Tighten the repayment sweep and request a fresh verified receivable.";
+  if (band === "watch") return "Monitor; hold new advances against this borrower.";
+  return overdueDays > 0 ? "Covered, but the advance is past due — confirm repayment." : "On track.";
+}
+
+// ---------------------------------------------------------------------------
 // Feature helpers — pure, deterministic.
 // ---------------------------------------------------------------------------
 
 /** Settled volume bucketed by calendar month, most-recent-first, dropping
  *  empty months so the variation reflects active trading. */
-function monthlyVolumes(settled: Corridor[], now: number): number[] {
+function monthlyVolumes(settled: Payment[], now: number): number[] {
   const buckets = new Map<number, number>();
   for (const c of settled) {
     const t = c.settledAt ?? now;
@@ -316,7 +666,7 @@ function monthKey(ms: number): number {
 }
 
 /** Recent-90d vs prior-90d throughput, squashed to 0..1 around 0.5 = flat. */
-function trajectoryRatio(settled: Corridor[], now: number): number {
+function trajectoryRatio(settled: Payment[], now: number): number {
   const window = 90 * 86_400_000;
   let recent = 0;
   let prior = 0;
@@ -334,7 +684,7 @@ function trajectoryRatio(settled: Corridor[], now: number): number {
 
 /** Herfindahl concentration index over counterparties: 0 = perfectly diverse,
  *  1 = a single counterparty. */
-function herfindahl(settled: Corridor[]): number {
+function herfindahl(settled: Payment[]): number {
   const total = settled.reduce((s, c) => s + c.amountAed, 0);
   if (total === 0) return 1;
   const byCp = new Map<string, number>();
@@ -402,5 +752,3 @@ function clamp01(n: number): number {
 function roundTo(n: number, step: number): number {
   return Math.round(n / step) * step;
 }
-
-export { AED_PER_USD };

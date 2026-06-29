@@ -6,18 +6,18 @@ The Send and Attest actions fire **real EVM transactions**. The app is fully env
 
 - **MockUSDC.sol** — 6-decimal ERC-20 with open `mint` (no faucet needed for the settlement asset).
 - **DhowEscrow.sol** — Proof-Lock conditional settlement:
-  - `lock(corridorId, supplier, amount, deadline)` — pulls USDC into escrow (payer pre-approves).
-  - `attestRelease(corridorId, proofRef)` — attester-only; releases to supplier. (Production swaps the attester role for an EAS attestation check.)
-  - `refund(corridorId)` — returns funds to payer after the deadline if no proof arrives.
+  - `lock(paymentId, supplier, amount, deadline)` — pulls USDC into escrow (payer pre-approves).
+  - `attestRelease(paymentId, proofRef)` — attester-only; releases to supplier. (Production swaps the attester role for an EAS attestation check.)
+  - `refund(paymentId)` — returns funds to payer after the deadline if no proof arrives.
   - Reentrancy-guarded; 6 passing tests in `test/DhowEscrow.t.sol`.
 
 Run tests: `cd contracts && forge test -vv`
 
 ## App wiring
 
-- `lib/chain.ts` — server-only viem layer (burner signer, minimal ABIs, env config). `corridorId(ref) = keccak256(ref)`.
+- `lib/chain.ts` — server-only viem layer (burner signer, minimal ABIs, env config). `paymentId(ref) = keccak256(ref)`.
 - `app/api/chain/route.ts` — POST `{ action: 'pay'|'lock'|'attest', ref, amountUsdc }` → `{ mode: 'chain'|'sim', txHash, explorerUrl }`. Fail-soft: any RPC error returns a sim hash so the demo never stalls.
-- `components/CorridorProvider.tsx` — `send`/`attest` update optimistically, then patch the real tx hash + polygonscan link when the receipt lands. Open settlement = direct USDC `transfer`; Proof-Lock = `lock` then `attestRelease`.
+- `components/CreditProvider.tsx` — `send`/`attest` update optimistically, then patch the real tx hash + polygonscan link when the receipt lands. Open settlement = direct USDC `transfer`; Proof-Lock = `lock` then `attestRelease`.
 
 ## Run locally against anvil (deterministic addresses)
 
@@ -34,7 +34,7 @@ DEPLOYER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 
 npm run dev -- -p 4400
 ```
 
-Verified end-to-end on anvil: lock pulls 112,185.16 USDC into escrow → attestRelease sends it to the supplier (supplier balance 0 → 112,185,160,000). Real tx hashes render as explorer links in the Corridor Record.
+Verified end-to-end on anvil: lock pulls 112,185.16 USDC into escrow → attestRelease sends it to the supplier (supplier balance 0 → 112,185,160,000). Real tx hashes render as explorer links in the Cashflow Record.
 
 ## Go live on Polygon Amoy (the one manual gate)
 

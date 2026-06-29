@@ -12,7 +12,7 @@
  * everything here is deterministic so the client and server agree.
  */
 
-import { AED_PER_USD } from "./corridor";
+import { AED_PER_USD } from "./credit";
 
 // ---- status & parties ----
 

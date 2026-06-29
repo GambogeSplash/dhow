@@ -7,7 +7,7 @@ import { useFinancierOverlays } from "@/components/financier-overlays";
 import { Avatar } from "@/components/Avatar";
 import { DealStatusPill, pct } from "@/components/deal-ui";
 import { stagger, riseItem, rise } from "@/lib/motion";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { permissions, feeAed, type Deal } from "@/lib/deal";
 
 /*

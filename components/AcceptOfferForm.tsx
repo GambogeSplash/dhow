@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { useCorridor } from "@/components/CorridorProvider";
+import { useCredit } from "@/components/CreditProvider";
 import { Avatar } from "@/components/Avatar";
 import { ChainBadge } from "@/components/ChainBadge";
 import { TermsSummary, pct } from "@/components/deal-ui";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { totalRepayableAed, type Deal } from "@/lib/deal";
 import { press } from "@/lib/motion";
 
@@ -16,7 +16,7 @@ import { press } from "@/lib/motion";
  * locks the terms (and, on a competing bid, declines the rivals).
  */
 export function AcceptOfferForm({ dealId, onClose }: { dealId: string; onClose: () => void }) {
-  const { deals, dealAction } = useCorridor();
+  const { deals, dealAction } = useCredit();
   const deal: Deal | undefined = deals.find((d) => d.id === dealId);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
