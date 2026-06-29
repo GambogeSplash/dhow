@@ -155,6 +155,15 @@ const LGD_UNSECURED = 0.85;
 // Pricing: base covers cost-of-capital + ops + margin; risk premium = EL.
 const APR_BASE_PCT = 8;
 
+// Health factor — runtime coverage on a LIVE advance. Banding mirrors the
+// remediation ladder: open conservative, escalate as coverage decays. Unlike a
+// DeFi health factor, HF < 1 does not auto-liquidate (receivables are illiquid)
+// — it triggers a workflow, so the floor is a flag, not a seizure.
+const HF_HEALTHY = 1.3; // ≥ this: on track
+const HF_WATCH = 1.15; // ≥ this: monitor, hold new advances
+const HF_FLOOR = 1.0; // ≥ this: tight; below: impaired
+const OVERDUE_GRACE_DAYS = 30; // a past-due receivable decays to zero coverage over this
+
 // ---------------------------------------------------------------------------
 // The model
 // ---------------------------------------------------------------------------
@@ -292,6 +301,120 @@ export function assessCredit(input: CreditInput): CreditAssessment {
     structure,
     reasons: reasonCodes(eligible, gateFailures, factors, grade, structure.securedByReceivable),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Health factor — runtime coverage on a live advance
+// ---------------------------------------------------------------------------
+// `assessCredit` underwrites a deal at ORIGINATION. Once money is out, nothing
+// there tells you the position is decaying. The health factor is that missing
+// runtime monitor: a single coverage ratio that updates as receivables are
+// attested, collected, default, or fall overdue — recomputable by a financier
+// from the same public facts.
+
+export type HealthBand = "healthy" | "watch" | "tight" | "impaired";
+
+export interface AdvanceHealthInput {
+  /** What is still owed on the advance (principal + accrued fee) — the EAD. */
+  outstandingAed: number;
+  /** Receivables backing this advance. Only verified ones secure it; the rest
+   *  are informational, exactly as in the limit calc. */
+  receivables?: Receivable[];
+  /** Holdback already captured by the financier — counts toward coverage. */
+  reserveHeldAed?: number;
+  /** When the advance itself is due. Past it, the position is overdue (a flag,
+   *  not part of the ratio). */
+  dueAt?: number;
+  now?: number;
+}
+
+export interface HealthContribution {
+  receivableId: string;
+  debtor: string;
+  faceAed: number;
+  countedAed: number; // face after advance-rate + overdue haircuts
+  haircutPct: number; // 1 - counted/face, as a percentage
+  note: string;
+}
+
+export interface AdvanceHealth {
+  /** Coverage ÷ exposure. `Infinity` when nothing is outstanding (repaid). */
+  hf: number;
+  band: HealthBand;
+  exposureAed: number;
+  coverageAed: number; // discounted receivables + reserve held
+  reserveAed: number;
+  overdueDays: number; // how late the advance itself is (0 if not due/early)
+  contributions: HealthContribution[];
+  /** The remediation step for this band — the workflow, not a liquidation. */
+  action: string;
+  headline: string;
+}
+
+/** Coverage ratio on a live advance. Pure: a function of the facts + `now`, so a
+ *  financier recomputes it independently. HF < 1 escalates a workflow (pause →
+ *  tighten sweep → draw reserve), it does not seize — receivables are illiquid. */
+export function advanceHealth(input: AdvanceHealthInput): AdvanceHealth {
+  const now = input.now ?? Date.now();
+  const exposureAed = Math.max(0, Math.round(input.outstandingAed));
+  const reserveAed = Math.max(0, Math.round(input.reserveHeldAed ?? 0));
+
+  const contributions: HealthContribution[] = [];
+  let receivableCoverage = 0;
+  for (const r of input.receivables ?? []) {
+    // Only a verified, on-chain-attested receivable secures the advance. Others
+    // are informational (collected ⇒ already swept; defaulted ⇒ worth nothing).
+    const secures = r.status === "verified" && !!r.attestationUid;
+    const overdueDays = Math.max(0, (now - r.dueAt) / 86_400_000);
+    const overdueFactor = clamp01(1 - overdueDays / OVERDUE_GRACE_DAYS);
+    const counted = secures ? r.amountAed * RECEIVABLE_ADVANCE_RATE * overdueFactor : 0;
+    receivableCoverage += counted;
+    contributions.push({
+      receivableId: r.id,
+      debtor: r.debtor.name,
+      faceAed: Math.round(r.amountAed),
+      countedAed: Math.round(counted),
+      haircutPct: r.amountAed > 0 ? roundTo((1 - counted / r.amountAed) * 100, 1) : 100,
+      note: !secures
+        ? r.status === "defaulted"
+          ? "defaulted — no value"
+          : r.status === "collected"
+            ? "collected — already swept"
+            : "unverified — not counted"
+        : overdueDays > 0
+          ? `${Math.round(overdueDays)}d overdue — discounted`
+          : "verified · advance-rate haircut",
+    });
+  }
+
+  const coverageAed = Math.round(receivableCoverage + reserveAed);
+  const hf = exposureAed > 0 ? coverageAed / exposureAed : Infinity;
+  const overdueDays =
+    input.dueAt && now > input.dueAt ? Math.round((now - input.dueAt) / 86_400_000) : 0;
+
+  const band: HealthBand =
+    hf >= HF_HEALTHY ? "healthy" : hf >= HF_WATCH ? "watch" : hf >= HF_FLOOR ? "tight" : "impaired";
+
+  return {
+    hf,
+    band,
+    exposureAed,
+    coverageAed,
+    reserveAed,
+    overdueDays,
+    contributions,
+    action: healthAction(band, overdueDays),
+    headline: exposureAed === 0 ? "Repaid — no exposure" : `${hf.toFixed(2)}× covered`,
+  };
+}
+
+function healthAction(band: HealthBand, overdueDays: number): string {
+  if (band === "impaired")
+    return "Coverage below 1.0× — draw the reserve and flag the financier.";
+  if (band === "tight")
+    return "Tighten the repayment sweep and request a fresh verified receivable.";
+  if (band === "watch") return "Monitor; hold new advances against this borrower.";
+  return overdueDays > 0 ? "Covered, but the advance is past due — confirm repayment." : "On track.";
 }
 
 // ---------------------------------------------------------------------------

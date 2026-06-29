@@ -8,9 +8,9 @@ import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
 import { ChainBadge } from "@/components/ChainBadge";
 import { DealStatusPill, TermsSummary, TermsEditor, DealThread, pct } from "@/components/deal-ui";
-import { GradeBadge } from "@/components/score-viz";
+import { GradeBadge, HealthFactorMeter } from "@/components/score-viz";
 import { aed } from "@/lib/corridor";
-import type { Receivable } from "@/lib/credit";
+import { advanceHealth, type Receivable } from "@/lib/credit";
 import {
   permissions,
   feeAed,
@@ -104,7 +104,7 @@ export default function CapitalPage() {
         <h1 className="font-display text-3xl tracking-tight">Working capital</h1>
 
         {/* active facility */}
-        {facility && <FacilityCard deal={facility} now={now} busy={busy} onRepay={() => run(() => dealAction({ action: "repay", dealId: facility.id }))} business={business?.name} />}
+        {facility && <FacilityCard deal={facility} now={now} busy={busy} onRepay={() => run(() => dealAction({ action: "repay", dealId: facility.id }))} business={business?.name} receivables={receivables} reservePct={credit.structure.reservePct} />}
 
         {/* competing offers */}
         {request && bids.length > 0 && (
@@ -328,12 +328,16 @@ function FacilityCard({
   busy,
   onRepay,
   business,
+  receivables,
+  reservePct,
 }: {
   deal: Deal;
   now: number;
   busy: boolean;
   onRepay: () => void;
   business?: string;
+  receivables: Receivable[];
+  reservePct: number;
 }) {
   if (deal.status === "agreed") {
     return (
@@ -361,6 +365,17 @@ function FacilityCard({
           <TermsSummary terms={deal.terms} dueAt={deal.dueAt} now={now} />
         </div>
         <div className="px-6 py-5">
+          <div className="mb-3">
+            <HealthFactorMeter
+              health={advanceHealth({
+                outstandingAed: totalRepayableAed(deal.terms),
+                receivables,
+                reserveHeldAed: Math.round(deal.terms.amountAed * (reservePct / 100)),
+                dueAt: deal.dueAt,
+                now,
+              })}
+            />
+          </div>
           <div className="mb-3 flex items-center justify-between rounded-[var(--radius-card)] bg-surface-sunk px-4 py-3 text-sm">
             <span className="text-ink-3">Due in</span>
             <span className="tnum font-medium">{deal.dueAt ? Math.max(0, daysUntil(deal.dueAt, now)) : deal.terms.tenorDays} days</span>
