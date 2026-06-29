@@ -8,7 +8,9 @@ import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
 import { ChainBadge } from "@/components/ChainBadge";
 import { DealStatusPill, TermsSummary, TermsEditor, DealThread, pct } from "@/components/deal-ui";
-import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
+import { GradeBadge } from "@/components/score-viz";
+import { aed } from "@/lib/corridor";
+import type { Receivable } from "@/lib/credit";
 import {
   permissions,
   feeAed,
@@ -21,7 +23,8 @@ import {
 import { springPop, springSoft, rise, stagger, riseItem, press } from "@/lib/motion";
 
 export default function CapitalPage() {
-  const { score, business, deals, maxAdvanceAed, dealAction } = useCorridor();
+  const { score, credit, business, deals, maxAdvanceAed, dealAction, receivables, addReceivable, verifyReceivable } =
+    useCorridor();
   const { openAccept, openRequestCapital } = useOverlays();
 
   const now = Date.now();
@@ -55,8 +58,9 @@ export default function CapitalPage() {
   const closed = deals.filter((d) => ["repaid", "declined", "withdrawn"].includes(d.status));
   const negotiating = !!request || !!single;
 
-  // Nothing at all and not eligible yet: the locked state.
-  if (deals.length === 0 && !score.eligible) {
+  // Nothing at all and not eligible yet: the locked state, with the specific
+  // reason codes from the v2 model so the borrower knows what to fix.
+  if (deals.length === 0 && !credit.eligible) {
     return (
       <div className="mx-auto max-w-xl">
         <h1 className="font-display text-3xl tracking-tight">Working capital</h1>
@@ -71,9 +75,17 @@ export default function CapitalPage() {
           </div>
           <p className="mt-4 font-medium">Not yet unlocked</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-3">
-            You can request working capital once your Credit Score crosses {ELIGIBLE_THRESHOLD}. You&apos;re
-            at {score.score}. Settle another corridor to get there.
+            A working-capital line opens once your account clears the checks below. Keep settling
+            corridors on Dhow to build the record.
           </p>
+          <ul className="mx-auto mt-4 max-w-sm space-y-1.5 text-left">
+            {credit.reasons.map((r, i) => (
+              <li key={i} className="flex gap-2 text-sm text-ink-2">
+                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-brass" />
+                {r}
+              </li>
+            ))}
+          </ul>
           <Link
             href="/corridor"
             className="mt-5 inline-block rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-paper"
@@ -127,7 +139,7 @@ export default function CapitalPage() {
         {single && <SingleNegotiation deal={single} maxAdvanceAed={maxAdvanceAed} busy={busy} run={run} dealAction={dealAction} onAccept={openAccept} />}
 
         {/* request entry when nothing is in negotiation */}
-        {!negotiating && score.eligible && (
+        {!negotiating && credit.eligible && (
           <motion.div variants={rise} initial="hidden" animate="show" className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
             <p className="font-medium">{facility ? "Need more capital?" : "Raise working capital"}</p>
             <p className="mt-1 text-sm text-ink-2">
@@ -142,6 +154,17 @@ export default function CapitalPage() {
               {facility ? "Request more capital →" : "Request working capital →"}
             </motion.button>
           </motion.div>
+        )}
+
+        {/* receivables — the inflow side that secures the line */}
+        {credit.eligible && (
+          <ReceivablesPanel
+            receivables={receivables}
+            securedLimitAed={credit.securedLimitAed}
+            onAdd={addReceivable}
+            onVerify={(id) => run(() => verifyReceivable(id))}
+            busy={busy}
+          />
         )}
 
         {/* history */}
@@ -176,17 +199,43 @@ export default function CapitalPage() {
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="tnum font-display text-2xl text-teal-deep">{score.score}</p>
-              <p className="text-xs text-ink-faint">Credit Score</p>
+            <div className="flex items-center gap-3 text-right">
+              <div>
+                <p className="tnum font-display text-2xl text-teal-deep">{score.score}</p>
+                <p className="text-xs text-ink-faint">Cashflow score</p>
+              </div>
+              <GradeBadge grade={credit.grade} />
             </div>
+          </div>
+
+          {/* The line the model approves: capacity + price + structure. */}
+          <div className="mt-4 rounded-[var(--radius-card)] bg-surface-sunk p-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-xs text-ink-faint">Approved line</p>
+                <p className="tnum font-display text-3xl tracking-tight text-ink">{aed(credit.limitAed)}</p>
+              </div>
+              <div className="text-right text-sm">
+                <p className="tnum font-medium text-ink">{credit.aprPct}% APR</p>
+                <p className="text-xs text-ink-faint">grade {credit.grade} · PD {(credit.pd * 100).toFixed(0)}%</p>
+              </div>
+            </div>
+            {credit.securedLimitAed > 0 ? (
+              <p className="mt-2 text-xs text-teal-deep">
+                {aed(credit.securedLimitAed)} secured by a verified receivable · {aed(credit.unsecuredLimitAed)} unsecured
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-ink-3">
+                Unsecured, behaviour-based. Attach a verified receivable to raise it.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 py-4">
             <Metric label="Verified settled volume" value={aed(score.trailingValueAed)} />
             <Metric label="Proof performance" value={`${Math.round(score.proofMetRatio * 100)}% clean`} />
-            <Metric label="Avg settlement" value={aed(score.avgCorridorAed)} />
-            <Metric label="Data" value="Live on-chain feed" accent />
+            <Metric label="Repayment sweep" value={`${credit.structure.repaymentSweepPct}% of inflow`} />
+            <Metric label="Tenor" value={`${credit.structure.maxTenorDays} days`} accent={credit.structure.securedByReceivable} />
           </div>
 
           <p className="border-t border-line pt-4 text-sm text-ink-2">
@@ -437,6 +486,127 @@ function DealHistory({ deals }: { deals: Deal[] }) {
           ))}
       </div>
     </div>
+  );
+}
+
+function ReceivablesPanel({
+  receivables,
+  securedLimitAed,
+  onAdd,
+  onVerify,
+  busy,
+}: {
+  receivables: Receivable[];
+  securedLimitAed: number;
+  onAdd: (input: { debtorName: string; debtorCity?: string; amountAed: number; dueAt: number }) => void;
+  onVerify: (id: string) => void;
+  busy: boolean;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [days, setDays] = useState("45");
+
+  function submit() {
+    const amountAed = Number(amount);
+    const d = Number(days);
+    if (!name.trim() || !amountAed || amountAed <= 0 || !d) return;
+    onAdd({ debtorName: name.trim(), amountAed, dueAt: Date.now() + d * 86_400_000 });
+    setName("");
+    setAmount("");
+    setDays("45");
+    setAdding(false);
+  }
+
+  return (
+    <motion.div variants={rise} initial="hidden" animate="show" className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium">Receivables</p>
+          <p className="mt-0.5 text-sm text-ink-3">
+            A verified receivable secures a larger, cheaper line.
+            {securedLimitAed > 0 && (
+              <span className="text-teal-deep"> {aed(securedLimitAed)} secured today.</span>
+            )}
+          </p>
+        </div>
+        {!adding && (
+          <button
+            onClick={() => setAdding(true)}
+            className="shrink-0 rounded-full border border-line px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-surface-sunk"
+          >
+            Add receivable
+          </button>
+        )}
+      </div>
+
+      {adding && (
+        <div className="mt-4 grid gap-2 rounded-[var(--radius-card)] bg-surface-sunk p-3 sm:grid-cols-[1fr_auto_auto_auto]">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Buyer / debtor name"
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-line-strong"
+          />
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+            inputMode="numeric"
+            placeholder="AED"
+            className="tnum w-28 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-line-strong"
+          />
+          <div className="flex items-center gap-1">
+            <input
+              value={days}
+              onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, ""))}
+              inputMode="numeric"
+              className="tnum w-16 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-line-strong"
+            />
+            <span className="text-xs text-ink-faint">days</span>
+          </div>
+          <div className="flex gap-1">
+            <button onClick={submit} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper">
+              Add
+            </button>
+            <button onClick={() => setAdding(false)} className="rounded-full px-3 py-2 text-sm text-ink-3 hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {receivables.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {receivables.map((r) => {
+            const verified = r.status === "verified";
+            const dueDays = Math.max(0, Math.round((r.dueAt - Date.now()) / 86_400_000));
+            return (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">{r.debtor.name}</p>
+                  <p className="text-xs text-ink-faint">due in {dueDays} days</p>
+                </div>
+                <p className="tnum text-sm font-medium">{aed(r.amountAed)}</p>
+                {verified ? (
+                  <span className="rounded-full bg-teal-tint px-3 py-1 text-xs font-medium text-teal-deep">
+                    Verified ✓
+                  </span>
+                ) : (
+                  <motion.button
+                    {...press}
+                    onClick={() => onVerify(r.id)}
+                    disabled={busy}
+                    className="rounded-full bg-teal px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-teal-deep disabled:opacity-50"
+                  >
+                    {busy ? "Verifying…" : "Verify"}
+                  </motion.button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </motion.div>
   );
 }
 

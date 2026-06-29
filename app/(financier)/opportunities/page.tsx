@@ -3,7 +3,7 @@
 import { useFinancier } from "@/components/FinancierProvider";
 import { useFinancierOverlays } from "@/components/financier-overlays";
 import { Avatar } from "@/components/Avatar";
-import { TierPill } from "@/components/score-viz";
+import { TierPill, GradeBadge } from "@/components/score-viz";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
 
@@ -63,7 +63,7 @@ export default function OpportunitiesPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <TierPill tier={b.score.tier} />
+                <GradeBadge grade={b.credit.grade} size={32} />
                 <div className="flex items-baseline gap-1">
                   <AnimatedNumber
                     value={b.score.score}
@@ -82,8 +82,10 @@ export default function OpportunitiesPage() {
               </div>
 
               <div className="text-right">
-                <p className="tnum text-sm">{eligible ? aed(b.offerAed) : "—"}</p>
-                <p className="text-xs text-ink-faint">advance offer</p>
+                <p className="tnum text-sm">{eligible ? aed(b.credit.limitAed) : "—"}</p>
+                <p className="text-xs text-ink-faint">
+                  {eligible ? `line · ${b.credit.aprPct}% APR` : "advance offer"}
+                </p>
               </div>
 
               {eligible ? (

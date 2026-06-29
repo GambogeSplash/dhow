@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import { useFinancier } from "@/components/FinancierProvider";
 import { FaucetCard } from "@/components/FaucetCard";
 import { Avatar } from "@/components/Avatar";
-import { ScoreCard } from "@/components/score-viz";
+import { ScoreCard, GradeBadge } from "@/components/score-viz";
 import { DealStatusPill, TermsSummary, TermsEditor, DealThread, pct } from "@/components/deal-ui";
 import { aed, usdcLabel } from "@/lib/corridor";
 import {
@@ -97,12 +97,23 @@ export function DealReview({ borrowerId, onClose }: { borrowerId: string; onClos
               Verified on-chain
             </span>
           )}
+          <GradeBadge grade={borrower.credit.grade} size={36} />
         </div>
       </div>
 
       <div className="mt-6 space-y-8">
         <section>
-          <h2 className="mb-3 text-sm font-medium text-ink-2">Credit Score</h2>
+          <h2 className="mb-3 text-sm font-medium text-ink-2">Credit assessment</h2>
+          {/* v2 underwriting summary: grade, approved line, price, structure. */}
+          <div className="mb-3 grid grid-cols-2 gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 sm:grid-cols-4">
+            <Underwrite label="Grade" value={borrower.credit.grade} accent />
+            <Underwrite label="Approved line" value={aed(borrower.credit.limitAed)} />
+            <Underwrite label="Indicative rate" value={`${borrower.credit.aprPct}% APR`} />
+            <Underwrite
+              label="Repayment sweep"
+              value={`${borrower.credit.structure.repaymentSweepPct}% of inflow`}
+            />
+          </div>
           <ScoreCard score={borrower.score} verifiedOnChain={borrower.onchainScore !== null} />
 
           {/* --- negotiation panel --- */}
@@ -319,6 +330,15 @@ export function DealReview({ borrowerId, onClose }: { borrowerId: string; onClos
 }
 
 /** A funded deal: the disbursed advance, the live terms, and the settlement tx. */
+function Underwrite({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs text-ink-faint">{label}</p>
+      <p className={`tnum mt-0.5 font-display text-lg ${accent ? "text-teal-deep" : "text-ink"}`}>{value}</p>
+    </div>
+  );
+}
+
 function FundedCard({ deal, now }: { deal: Deal; now: number }) {
   return (
     <motion.div

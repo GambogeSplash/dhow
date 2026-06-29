@@ -11,6 +11,7 @@ import {
   scoreCorridors,
 } from "@/lib/corridor";
 import type { Business } from "@/lib/account";
+import { assessCredit, type CreditAssessment } from "@/lib/credit";
 import {
   apiListFacilities,
   apiCreateFacility,
@@ -55,6 +56,7 @@ export interface Borrower {
   wallet?: string;
   corridors: Corridor[];
   score: CorridorScore;
+  credit: CreditAssessment;
   offerAed: number;
   onchainScore: number | null;
 }
@@ -116,6 +118,11 @@ function toBorrower(
   onchainScore: number | null,
 ): Borrower {
   const score = scoreCorridors(corridors, now);
+  const credit = assessCredit({
+    profile: { kybVerified: true, onboardedAt: business.createdAt },
+    corridors,
+    now,
+  });
   return {
     id: business.id,
     name: business.name,
@@ -124,6 +131,7 @@ function toBorrower(
     wallet: business.walletAddress,
     corridors,
     score,
+    credit,
     offerAed: advanceOffer(score),
     onchainScore,
   };

@@ -3,6 +3,7 @@ import { db } from "./db";
 import type { Business, Supplier, AccountRecord } from "./account";
 import type { Corridor, SettlementMode, SettlementStatus, ProofStatus, TxState } from "./corridor";
 import { makeCorridorUsdc } from "./corridor";
+import type { Receivable } from "./credit";
 import type { Deal, DealEvent } from "./deal";
 
 /*
@@ -50,6 +51,19 @@ type CorridorRow = {
   tx_hash: string | null;
   explorer_url: string | null;
   tx_state: string | null;
+};
+
+type ReceivableRow = {
+  id: string;
+  debtor_id: string;
+  debtor_name: string;
+  debtor_city: string;
+  debtor_country: string;
+  amount_aed: number;
+  due_at: string | number;
+  status: string;
+  attestation_uid: string | null;
+  created_at: string | number;
 };
 
 const num = (v: string | number | null): number => (v == null ? 0 : Number(v));
@@ -104,6 +118,22 @@ function toCorridor(r: CorridorRow, suppliers: Supplier[]): Corridor {
   };
 }
 
+function toReceivable(r: ReceivableRow): Receivable {
+  return {
+    id: r.id,
+    debtor: {
+      id: r.debtor_id,
+      name: r.debtor_name,
+      city: r.debtor_city,
+      country: r.debtor_country,
+    },
+    amountAed: num(r.amount_aed),
+    dueAt: num(r.due_at),
+    status: r.status as Receivable["status"],
+    attestationUid: r.attestation_uid ?? undefined,
+  };
+}
+
 // ---- account ----
 
 /** The full workspace for one business, or null if not onboarded yet. */
@@ -123,7 +153,59 @@ export async function getAccount(businessId: string): Promise<AccountRecord | nu
   `) as CorridorRow[];
   const corridors = corRows.map((c) => toCorridor(c, suppliers));
 
-  return { business, suppliers, corridors, offerAccepted: rows[0].offer_accepted };
+  const receivables = await listReceivables(businessId);
+
+  return { business, suppliers, corridors, receivables, offerAccepted: rows[0].offer_accepted };
+}
+
+// ---- receivables ----
+
+export async function listReceivables(businessId: string): Promise<Receivable[]> {
+  const sql = db();
+  const rows = (await sql`
+    SELECT * FROM receivables WHERE business_id = ${businessId} ORDER BY created_at DESC
+  `) as ReceivableRow[];
+  return rows.map(toReceivable);
+}
+
+export async function createReceivable(
+  businessId: string,
+  r: {
+    id: string;
+    debtorId: string;
+    debtorName: string;
+    debtorCity?: string;
+    debtorCountry?: string;
+    amountAed: number;
+    dueAt: number;
+    createdAt: number;
+  },
+): Promise<void> {
+  const sql = db();
+  await sql`
+    INSERT INTO receivables (
+      id, business_id, debtor_id, debtor_name, debtor_city, debtor_country,
+      amount_aed, due_at, status, created_at
+    ) VALUES (
+      ${r.id}, ${businessId}, ${r.debtorId}, ${r.debtorName}, ${r.debtorCity ?? ""}, ${r.debtorCountry ?? "AE"},
+      ${r.amountAed}, ${r.dueAt}, 'expected', ${r.createdAt}
+    )
+    ON CONFLICT (id) DO NOTHING
+  `;
+}
+
+/** Flip a receivable to verified with its on-chain attestation uid. Scoped to
+ *  the owning business so a caller can only verify their own claims. */
+export async function verifyReceivable(
+  businessId: string,
+  id: string,
+  attestationUid: string,
+): Promise<void> {
+  const sql = db();
+  await sql`
+    UPDATE receivables SET status = 'verified', attestation_uid = ${attestationUid}
+    WHERE id = ${id} AND business_id = ${businessId}
+  `;
 }
 
 /** Create the row for a freshly authenticated user (empty profile). */
