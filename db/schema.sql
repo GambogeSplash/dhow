@@ -47,6 +47,24 @@ CREATE TABLE IF NOT EXISTS corridors (
 );
 CREATE INDEX IF NOT EXISTS corridors_business_idx ON corridors(business_id);
 
+-- Incoming claims a business is owed (the inflow side). A verified receivable
+-- (status='verified' with an attestation_uid) secures a larger, cheaper
+-- working-capital line — the self-liquidating leg of the credit model.
+CREATE TABLE IF NOT EXISTS receivables (
+  id               TEXT PRIMARY KEY,
+  business_id      TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  debtor_id        TEXT NOT NULL,
+  debtor_name      TEXT NOT NULL,
+  debtor_city      TEXT NOT NULL DEFAULT '',
+  debtor_country   TEXT NOT NULL DEFAULT 'AE',
+  amount_aed       DOUBLE PRECISION NOT NULL,
+  due_at           BIGINT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'expected',  -- expected | verified | collected | defaulted
+  attestation_uid  TEXT,                              -- EAS proof uid once verified
+  created_at       BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS receivables_business_idx ON receivables(business_id);
+
 -- Working-capital facilities a financier has funded to a borrower. The funding
 -- itself is a real on-chain USDC transfer signed by the financier's wallet;
 -- this records the commitment and the settlement tx.

@@ -16,6 +16,7 @@ import type {
   ProofStatus,
   TxState,
 } from "./corridor";
+import type { Receivable } from "./credit";
 import type { Deal, DealTerms } from "./deal";
 
 export interface Business {
@@ -35,6 +36,7 @@ export interface AccountRecord {
   business: Business;
   suppliers: Supplier[];
   corridors: Corridor[];
+  receivables: Receivable[];
   offerAccepted: boolean;
 }
 
@@ -148,6 +150,31 @@ export async function apiCreateCorridor(
 
 export async function apiPatchCorridor(token: string, id: string, patch: CorridorPatch): Promise<void> {
   await call(token, "/api/corridors", { method: "PATCH", body: { id, patch } });
+}
+
+// ---- receivables ----
+
+export async function apiCreateReceivable(
+  token: string,
+  input: {
+    id: string;
+    debtorId: string;
+    debtorName: string;
+    debtorCity?: string;
+    amountAed: number;
+    dueAt: number;
+    createdAt: number;
+  },
+): Promise<void> {
+  await call(token, "/api/receivables", { method: "POST", body: input });
+}
+
+export async function apiVerifyReceivable(
+  token: string,
+  id: string,
+  attestationUid: string,
+): Promise<void> {
+  await call(token, "/api/receivables", { method: "PATCH", body: { id, attestationUid } });
 }
 
 // ---- facilities (financier side) ----

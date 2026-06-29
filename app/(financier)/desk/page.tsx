@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useFinancier } from "@/components/FinancierProvider";
 import { useFinancierOverlays } from "@/components/financier-overlays";
 import { Avatar } from "@/components/Avatar";
-import { TierPill } from "@/components/score-viz";
+import { TierPill, GradeBadge } from "@/components/score-viz";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
 
@@ -81,7 +81,7 @@ export default function DeskPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <TierPill tier={b.score.tier} />
+                  <GradeBadge grade={b.credit.grade} size={32} />
                   <div className="flex items-baseline gap-1">
                     <AnimatedNumber
                       value={b.score.score}
@@ -98,8 +98,8 @@ export default function DeskPage() {
                 </div>
 
                 <div className="text-right">
-                  <p className="font-display tnum text-xl text-brass-deep">{aed(b.offerAed)}</p>
-                  <p className="text-xs text-ink-faint">advance offer</p>
+                  <p className="font-display tnum text-xl text-brass-deep">{aed(b.credit.limitAed)}</p>
+                  <p className="text-xs text-ink-faint">line · {b.credit.aprPct}% APR</p>
                 </div>
 
                 <span className="text-sm font-medium text-brass-deep">Review deal →</span>

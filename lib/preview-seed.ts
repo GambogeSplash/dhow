@@ -13,6 +13,7 @@ import {
   makeCorridorUsdc,
 } from "./corridor";
 import type { Business, Supplier } from "./account";
+import type { Receivable } from "./credit";
 import { type Deal, type DealTerms, dueAt } from "./deal";
 
 export const SEED_NOW = 1_781_913_600_000; // fixed reference instant (~mid 2026)
@@ -120,6 +121,18 @@ export const seedBusiness: Business = {
   walletAddress: wallet("alnoor"),
   createdAt: SEED_NOW - 120 * DAY,
 };
+
+// One expected (unverified) receivable so the Capital page can demonstrate the
+// flow: verify it → an attested obligation appears → the secured line unlocks.
+export const seedReceivables: Receivable[] = [
+  {
+    id: "rcv_aurora",
+    debtor: { id: "dbt_aurora", name: "Aurora Retail Group", city: "Abu Dhabi", country: "AE" },
+    amountAed: 300_000,
+    dueAt: SEED_NOW + 45 * DAY,
+    status: "expected",
+  },
+];
 
 export const seedCorridors: Corridor[] = corridors([
   {

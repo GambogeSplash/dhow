@@ -14,11 +14,14 @@ import type { EIP1193Provider, Hex } from "viem";
 import {
   advanceOffer,
   Corridor,
+  Counterparty,
   CorridorScore,
   makeCorridorUsdc,
   scoreCorridors,
   SettlementMode,
 } from "@/lib/corridor";
+import { assessCredit, type CreditAssessment, type Receivable } from "@/lib/credit";
+import type { Business as BizForCredit } from "@/lib/account";
 import {
   AccountRecord,
   Business,
@@ -31,6 +34,8 @@ import {
   apiAddSupplier,
   apiCreateCorridor,
   apiPatchCorridor,
+  apiCreateReceivable,
+  apiVerifyReceivable,
   apiBorrowerDeals,
   apiRequestDeal,
   apiDealAction,
@@ -60,6 +65,7 @@ import {
   seedBusiness,
   seedSuppliers,
   seedCorridors,
+  seedReceivables,
   seedImporterDeals,
   previewTx,
 } from "@/lib/preview-seed";
@@ -69,6 +75,63 @@ function requestHeadroom(score: CorridorScore): number {
   if (!score.eligible) return 0;
   const base = score.avgCorridorAed * (score.tier === "preferred" ? 0.6 : 0.4);
   return Math.max(5_000, Math.round(base / 1_000) * 1_000);
+}
+
+/** v2 credit assessment (lib/credit.ts) from the workspace's own facts. KYB is
+ *  treated as complete once a business has onboarded; the fund-flow graph is not
+ *  wired client-side, so no counterparties are flagged here. */
+function creditFor(
+  business: BizForCredit | null,
+  corridors: Corridor[],
+  receivables: Receivable[],
+  now: number,
+): CreditAssessment {
+  return assessCredit({
+    profile: {
+      kybVerified: !!business,
+      onboardedAt: business?.createdAt ?? now,
+    },
+    corridors,
+    receivables,
+    now,
+  });
+}
+
+/** A bytes32-shaped sim attestation uid for preview (no chain). */
+function simUid(): string {
+  let s = "0x";
+  for (let i = 0; i < 64; i++) s += Math.floor(Math.random() * 16).toString(16);
+  return s;
+}
+
+function newReceivableId(): string {
+  try {
+    return `rcv_${crypto.randomUUID().slice(0, 8)}`;
+  } catch {
+    return `rcv_${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+/** Build a fresh, unverified receivable from a borrower's form input. */
+function makeReceivable(input: {
+  debtorName: string;
+  debtorCity?: string;
+  amountAed: number;
+  dueAt: number;
+}): Receivable {
+  const debtor: Counterparty = {
+    id: `dbt_${input.debtorName.toLowerCase().replace(/\s+/g, "-").slice(0, 16)}`,
+    name: input.debtorName,
+    city: input.debtorCity ?? "—",
+    country: "AE",
+  };
+  return {
+    id: newReceivableId(),
+    debtor,
+    amountAed: input.amountAed,
+    dueAt: input.dueAt,
+    status: "expected",
+  };
 }
 
 /** The deal that matters now: an open negotiation or live facility, newest first. */
@@ -107,9 +170,20 @@ interface WorkspaceState {
   // corridors
   corridors: Corridor[];
   score: CorridorScore;
+  credit: CreditAssessment;
   prevScore: number;
   offerAed: number;
   offerAccepted: boolean;
+
+  // receivables (the inflow side — secures the working-capital line)
+  receivables: Receivable[];
+  addReceivable: (input: {
+    debtorName: string;
+    debtorCity?: string;
+    amountAed: number;
+    dueAt: number;
+  }) => void;
+  verifyReceivable: (id: string) => Promise<void>;
 
   // corridor actions
   sendPayment: (input: {
@@ -211,7 +285,20 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
   );
   const corridorsRef = useRef(corridors);
   corridorsRef.current = corridors;
+  const [receivables, setReceivables] = useState<Receivable[]>(seedReceivables);
   const score = scoreCorridors(corridors, SEED_NOW);
+  const credit = creditFor(seedBusiness, corridors, receivables, SEED_NOW);
+
+  // Receivables (preview): attestation is simulated locally — verifying flips an
+  // expected claim to verified with a sim uid, which unlocks the secured line.
+  const addReceivable: WorkspaceState["addReceivable"] = (input) => {
+    setReceivables((prev) => [makeReceivable(input), ...prev]);
+  };
+  const verifyReceivable: WorkspaceState["verifyReceivable"] = async (id) => {
+    setReceivables((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: "verified", attestationUid: simUid() } : r)),
+    );
+  };
 
   // Preview deal actions mutate local state through the same pure state machine
   // the server uses, so the negotiation behaves identically without a backend.
@@ -370,9 +457,13 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
     signOut: () => {},
     corridors,
     score,
+    credit,
     prevScore,
     offerAed: advanceOffer(score),
     offerAccepted,
+    receivables,
+    addReceivable,
+    verifyReceivable,
     sendPayment,
     attest,
     refund,
@@ -382,7 +473,7 @@ function CorridorPreview({ children }: { children: React.ReactNode }) {
     startReal: () => {},
     deals,
     activeDeal: pickActiveDeal(deals),
-    maxAdvanceAed: requestHeadroom(score),
+    maxAdvanceAed: credit.eligible ? credit.limitAed : requestHeadroom(score),
     requestCapital,
     dealAction,
     repayPrompt,
@@ -400,6 +491,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   const [business, setBusiness] = useState<Business | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [corridors, setCorridors] = useState<Corridor[]>([]);
+  const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [prevScore, setPrevScore] = useState(0);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -425,6 +517,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     setSuppliers(rec.suppliers);
     setCorridors(rec.corridors);
     corridorsRef.current = rec.corridors;
+    setReceivables(rec.receivables ?? []);
     setOfferAccepted(rec.offerAccepted);
   }, []);
 
@@ -496,6 +589,47 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
   // Score the sample against its own reference instant so cadence reads fresh.
   const score = sampleMode ? scoreCorridors(seedCorridors, SEED_NOW) : realScore;
   const offerAed = useMemo(() => advanceOffer(score), [score]);
+  const credit = useMemo(
+    () =>
+      sampleMode
+        ? creditFor(seedBusiness, seedCorridors, seedReceivables, SEED_NOW)
+        : creditFor(business, corridors, receivables, now),
+    [sampleMode, business, corridors, receivables, now],
+  );
+
+  // Receivables (live): the inspector attests the obligation server-side (real
+  // EAS uid); a verified receivable secures the working-capital line. Held in
+  // local state for now — persisting to the database is the next step.
+  const addReceivable = useCallback<WorkspaceState["addReceivable"]>((input) => {
+    const r = makeReceivable(input);
+    setReceivables((prev) => [r, ...prev]); // optimistic
+    (async () => {
+      const tok = await getAccessToken();
+      if (tok)
+        await apiCreateReceivable(tok, {
+          id: r.id,
+          debtorId: r.debtor.id,
+          debtorName: r.debtor.name,
+          debtorCity: r.debtor.city,
+          amountAed: r.amountAed,
+          dueAt: r.dueAt,
+          createdAt: Date.now(),
+        }).catch((e) => console.error("receivable persist failed", e));
+    })();
+  }, []);
+  const verifyReceivable = useCallback<WorkspaceState["verifyReceivable"]>(
+    async (id) => {
+      // The inspector attests the obligation on-chain; the uid is the proof.
+      const { uid } = await postAttest(`RCV-${id}`, walletAddress);
+      if (!uid) throw new Error("Attestation service unavailable. Try again once chain is configured.");
+      setReceivables((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "verified", attestationUid: uid } : r)),
+      );
+      const tok = await getAccessToken();
+      if (tok) await apiVerifyReceivable(tok, id, uid).catch((e) => console.error("receivable verify persist failed", e));
+    },
+    [walletAddress],
+  );
 
   const patch = useCallback((id: string, fields: Partial<Corridor>) => {
     setCorridors((prev) => {
@@ -859,9 +993,13 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     signOut,
     corridors: viewCorridors,
     score,
+    credit,
     prevScore,
     offerAed,
     offerAccepted,
+    receivables: sampleMode ? seedReceivables : receivables,
+    addReceivable,
+    verifyReceivable,
     sendPayment,
     attest,
     refund,
@@ -871,7 +1009,7 @@ function CorridorLive({ children }: { children: React.ReactNode }) {
     startReal,
     deals,
     activeDeal: pickActiveDeal(deals),
-    maxAdvanceAed: requestHeadroom(score),
+    maxAdvanceAed: credit.eligible ? credit.limitAed : requestHeadroom(score),
     requestCapital,
     dealAction,
     repayPrompt,

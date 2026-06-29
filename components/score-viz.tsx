@@ -2,6 +2,27 @@
 
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { CorridorScore, ELIGIBLE_THRESHOLD, ScoreFactor } from "@/lib/corridor";
+import type { Grade } from "@/lib/credit";
+
+/** The v2 credit grade as a coloured chip — one component, used by the importer
+ *  Capital page and the financier desk so both read the grade identically. */
+export function GradeBadge({ grade, size = 36 }: { grade: Grade; size?: number }) {
+  const map: Record<Grade, string> = {
+    A: "bg-teal text-white",
+    B: "bg-teal-tint text-teal-deep",
+    C: "bg-brass/20 text-brass-deep",
+    D: "bg-brass/30 text-brass-deep",
+    E: "bg-danger/15 text-danger",
+  };
+  return (
+    <span
+      className={`flex items-center justify-center rounded-full font-display ${map[grade]}`}
+      style={{ height: size, width: size, fontSize: size * 0.5 }}
+    >
+      {grade}
+    </span>
+  );
+}
 
 /*
  * Shared Credit Score visualisation, used by both the importer's Corridor
