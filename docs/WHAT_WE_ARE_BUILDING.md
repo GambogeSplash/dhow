@@ -129,7 +129,7 @@ The payment is the wedge in three senses at once:
 | --- | --- |
 | **Settlement** | USDC on **Polygon (Amoy testnet today)**. `DhowEscrow` Proof-Lock contract (Foundry-tested), conditional release gated on a real **EAS** shipment-proof attestation. |
 | **Identity & wallet** | **Privy** — real login + a non-custodial embedded wallet per business. **The user signs their own settlements.** Dhow never holds their funds. |
-| **Credit record** | `DhowScoreRegistry` on-chain; the score is computed by a pure, auditable engine (`lib/corridor.ts`) from settled corridors and posted on-chain. |
+| **Credit record** | `DhowScoreRegistry` on-chain; the score is computed by a pure, auditable engine (`lib/credit.ts`) from settled corridors and posted on-chain. |
 | **Data** | **Neon / Vercel Postgres** — businesses, suppliers, corridors. Per-user, server-authoritative, scoped to the authenticated Privy identity. |
 | **App** | Next.js 16, server API routes for persistence, client-side signing via the user's embedded wallet. |
 

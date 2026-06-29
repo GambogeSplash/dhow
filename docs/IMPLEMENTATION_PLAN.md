@@ -143,7 +143,7 @@ path to mainnet. Pick from these against feedback; do not build all of it.
 
 ### Branching and review
 - Feature work off `main`, PR, `main` auto-deploys to Vercel.
-- Three people now: anything touching the shared seam (`lib/corridor.ts`, the score-registry semantics, the EAS schema) needs a second reviewer from the affected lane.
+- Three people now: anything touching the shared seam (`lib/credit.ts`, the score-registry semantics, the EAS schema) needs a second reviewer from the affected lane.
 
 ### The shared seam, restated
 If a change touches the scoring engine, the score registry, or the attestation

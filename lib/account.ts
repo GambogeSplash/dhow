@@ -15,7 +15,7 @@ import type {
   SettlementStatus,
   ProofStatus,
   TxState,
-} from "./corridor";
+} from "./credit";
 import type { Receivable } from "./credit";
 import type { Deal, DealTerms } from "./deal";
 

@@ -1,4 +1,4 @@
-import type { Financier } from "./corridor";
+import type { Financier } from "./credit";
 
 /*
  * The financiers on the Dhow network — the demand side of the marketplace. A

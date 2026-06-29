@@ -6,7 +6,7 @@ import {
   AED_PER_USD,
   ELIGIBLE_THRESHOLD,
   type Corridor,
-} from "./corridor";
+} from "./credit";
 
 const DAY = 86_400_000;
 const NOW = 1_700_000_000_000; // fixed clock so cadence is deterministic

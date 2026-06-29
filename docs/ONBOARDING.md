@@ -43,7 +43,7 @@ strict signing rule:
   `lib/chain.ts` + `lib/eas.ts`. These are legitimately third-party / operator
   actions, not the buyer's money.
 
-**The shared contract:** `lib/corridor.ts` is the scoring engine. It is pure,
+**The shared contract:** `lib/credit.ts` is the scoring engine. It is pure,
 chain-agnostic, and imported by **both** the client (optimistic UI) and the
 server (posting the score on-chain). **Never fork it** — both sides must compute
 the identical number, or the on-chain score and the UI disagree.
@@ -162,7 +162,7 @@ Full local-chain flow (anvil → deploy → real txs) and Amoy deploy:
 
 ## The shared seam, restated
 
-If you change `lib/corridor.ts`, the contract `DhowScoreRegistry` semantics, or
+If you change `lib/credit.ts`, the contract `DhowScoreRegistry` semantics, or
 the EAS schema, you've touched all three lanes at once. Flag those in the PR and
 loop the other two in. Everything else is mostly lane-local.
 </content>

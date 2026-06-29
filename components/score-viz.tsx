@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatedNumber } from "@/components/AnimatedNumber";
-import { CorridorScore, ELIGIBLE_THRESHOLD, ScoreFactor, aed } from "@/lib/corridor";
+import { CorridorScore, ELIGIBLE_THRESHOLD, ScoreFactor, aed } from "@/lib/credit";
 import type { AdvanceHealth, Grade, HealthBand } from "@/lib/credit";
 
 /** The v2 credit grade as a coloured chip — one component, used by the importer

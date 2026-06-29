@@ -1,8 +1,8 @@
 import "server-only";
 import { db } from "./db";
 import type { Business, Supplier, AccountRecord } from "./account";
-import type { Corridor, SettlementMode, SettlementStatus, ProofStatus, TxState } from "./corridor";
-import { makeCorridorUsdc } from "./corridor";
+import type { Corridor, SettlementMode, SettlementStatus, ProofStatus, TxState } from "./credit";
+import { makeCorridorUsdc } from "./credit";
 import type { Receivable } from "./credit";
 import type { Deal, DealEvent } from "./deal";
 

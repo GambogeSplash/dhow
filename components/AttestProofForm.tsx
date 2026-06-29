@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { useCorridor } from "@/components/CorridorProvider";
 import { Avatar } from "@/components/Avatar";
-import { aed, usdcLabel } from "@/lib/corridor";
+import { aed, usdcLabel } from "@/lib/credit";
 import { press } from "@/lib/motion";
 
 const INSPECTOR = "Gulf Inspectorate";

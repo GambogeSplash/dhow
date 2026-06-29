@@ -11,7 +11,7 @@ import {
   type SettlementStatus,
   type ProofStatus,
   makeCorridorUsdc,
-} from "./corridor";
+} from "./credit";
 import type { Business, Supplier } from "./account";
 import type { Receivable } from "./credit";
 import { type Deal, type DealTerms, dueAt } from "./deal";

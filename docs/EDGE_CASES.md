@@ -77,7 +77,7 @@ matrix. Update the status as cases get covered.
 | Disputed open settlement (no escrow) | Cannot phantom-refund; only prooflocks refund | Handled (open-settlement phantom-proof bug previously fixed) |
 | Refund of a corridor whose write earlier failed | Excluded from score either way | Handled (`txState === "failed"` excluded) |
 
-## 6. Scoring engine (`lib/corridor.ts`)
+## 6. Scoring engine (`lib/credit.ts`)
 
 | Scenario | Expected | Status |
 | --- | --- | --- |
@@ -86,7 +86,7 @@ matrix. Update the status as cases get covered.
 | No prooflocks yet | No negative proof signal (`proofMetRatio = 1`) but performance still requires a settlement | Handled |
 | One settlement only | Cadence scaled by count, not over-rewarded | Handled (`settledCount / 2` branch) |
 | Score exactly at threshold (70 / 88) | Tier boundaries inclusive and consistent | Handled (`>=` comparisons) |
-| Client and server compute different scores | Must never happen; one shared pure function | Handled (do not fork `corridor.ts`) |
+| Client and server compute different scores | Must never happen; one shared pure function | Handled (do not fork `credit.ts`) |
 | Stale `now` causing odd cadence (SSR vs client) | Deterministic; preview uses a fixed `SEED_NOW` | Handled (preview), Partial (live uses real `now`, fine) |
 | Advance offer when not eligible | Returns 0 | Handled (`advanceOffer` guards on `eligible`) |
 
@@ -217,5 +217,5 @@ the caller's party and rejects illegal moves with 409.
   or "Open" is a hardening ticket for Milestone 1.
 - When you add a feature, add its edge cases here first, then implement, then
   flip the status.
-- Anything touching the shared seam (`lib/corridor.ts`, the score registry, the
+- Anything touching the shared seam (`lib/credit.ts`, the score registry, the
   EAS schema) needs its edge cases reviewed by the other two lanes.

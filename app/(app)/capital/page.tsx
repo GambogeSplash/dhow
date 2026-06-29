@@ -9,8 +9,7 @@ import { Avatar } from "@/components/Avatar";
 import { ChainBadge } from "@/components/ChainBadge";
 import { DealStatusPill, TermsSummary, TermsEditor, DealThread, pct } from "@/components/deal-ui";
 import { GradeBadge, HealthFactorMeter } from "@/components/score-viz";
-import { aed } from "@/lib/corridor";
-import { advanceHealth, type Receivable } from "@/lib/credit";
+import { aed, advanceHealth, type Receivable } from "@/lib/credit";
 import {
   permissions,
   feeAed,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { assessCredit, advanceHealth, type CreditInput, type Receivable } from "./credit";
-import type { Corridor, Counterparty } from "./corridor";
+import type { Corridor, Counterparty } from "./credit";
 
 const DAY = 86_400_000;
 const NOW = 1_700_000_000_000;

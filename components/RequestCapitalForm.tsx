@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useCorridor } from "@/components/CorridorProvider";
 import { TermsEditor } from "@/components/deal-ui";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { DEFAULT_RATE_PCT, DEFAULT_TENOR_DAYS, type DealTerms } from "@/lib/deal";
 
 /*

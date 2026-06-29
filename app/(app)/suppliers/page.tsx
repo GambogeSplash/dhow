@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { useCorridor } from "@/components/CorridorProvider";
 import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { stagger, riseItem } from "@/lib/motion";
 
 export default function SuppliersPage() {

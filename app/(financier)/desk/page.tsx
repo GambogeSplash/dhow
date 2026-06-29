@@ -6,7 +6,7 @@ import { useFinancierOverlays } from "@/components/financier-overlays";
 import { Avatar } from "@/components/Avatar";
 import { TierPill, GradeBadge } from "@/components/score-viz";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
-import { aed, ELIGIBLE_THRESHOLD } from "@/lib/corridor";
+import { aed, ELIGIBLE_THRESHOLD } from "@/lib/credit";
 
 export default function DeskPage() {
   const { financier, borrowers, facilities, deployedAed, availableAed } = useFinancier();

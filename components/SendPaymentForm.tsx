@@ -8,7 +8,7 @@ import { useCorridor } from "@/components/CorridorProvider";
 import { Avatar } from "@/components/Avatar";
 import { FaucetCard } from "@/components/FaucetCard";
 import { ChainBadge } from "@/components/ChainBadge";
-import { AED_PER_USD, makeCorridorUsdc, SettlementMode, usdcLabel } from "@/lib/corridor";
+import { AED_PER_USD, makeCorridorUsdc, SettlementMode, usdcLabel } from "@/lib/credit";
 import { press } from "@/lib/motion";
 import { chainConfigured, readBalances } from "@/lib/chain-client";
 import { cleanText, sanitizeSupplier, GOODS_MAX, NAME_MAX, PLACE_MAX } from "@/lib/validate";

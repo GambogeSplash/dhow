@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { useCorridor } from "@/components/CorridorProvider";
 import { useOverlays } from "@/components/overlays";
 import { Avatar } from "@/components/Avatar";
-import { aed, Corridor, ELIGIBLE_THRESHOLD, usdcLabel } from "@/lib/corridor";
+import { aed, Corridor, ELIGIBLE_THRESHOLD, usdcLabel } from "@/lib/credit";
 import { statusLabel, ACTIVE_STATUSES } from "@/lib/deal";
 import { stagger, riseItem } from "@/lib/motion";
 

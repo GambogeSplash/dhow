@@ -6,7 +6,7 @@ import { useCorridor } from "@/components/CorridorProvider";
 import { Avatar } from "@/components/Avatar";
 import { ChainBadge } from "@/components/ChainBadge";
 import { TermsSummary, pct } from "@/components/deal-ui";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { totalRepayableAed, type Deal } from "@/lib/deal";
 import { press } from "@/lib/motion";
 

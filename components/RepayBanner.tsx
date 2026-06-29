@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCorridor } from "@/components/CorridorProvider";
-import { aed } from "@/lib/corridor";
+import { aed } from "@/lib/credit";
 import { springSoft, press } from "@/lib/motion";
 
 /*

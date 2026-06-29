@@ -9,7 +9,7 @@ import {
   Corridor,
   CorridorScore,
   scoreCorridors,
-} from "@/lib/corridor";
+} from "@/lib/credit";
 import type { Business } from "@/lib/account";
 import { assessCredit, type CreditAssessment } from "@/lib/credit";
 import {

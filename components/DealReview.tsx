@@ -8,7 +8,7 @@ import { FaucetCard } from "@/components/FaucetCard";
 import { Avatar } from "@/components/Avatar";
 import { ScoreCard, GradeBadge } from "@/components/score-viz";
 import { DealStatusPill, TermsSummary, TermsEditor, DealThread, pct } from "@/components/deal-ui";
-import { aed, usdcLabel } from "@/lib/corridor";
+import { aed, usdcLabel } from "@/lib/credit";
 import {
   permissions,
   totalRepayableAed,

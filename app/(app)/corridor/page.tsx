@@ -12,7 +12,7 @@ import {
   ELIGIBLE_THRESHOLD,
   ScoreFactor,
   usdcLabel,
-} from "@/lib/corridor";
+} from "@/lib/credit";
 
 export default function CorridorPage() {
   const { corridors, score, prevScore, retry, offerAed } = useCorridor();

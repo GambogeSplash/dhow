@@ -5,7 +5,7 @@ import { indexCorridors } from "@/lib/indexer";
 import { getUserId, privyConfigured } from "@/lib/privy-server";
 import { dbConfigured } from "@/lib/db";
 import { createCorridor, updateCorridor, type CorridorPatch } from "@/lib/store-server";
-import type { SettlementMode, SettlementStatus, TxState } from "@/lib/corridor";
+import type { SettlementMode, SettlementStatus, TxState } from "@/lib/credit";
 import { cleanText, GOODS_MAX } from "@/lib/validate";
 
 export const runtime = "nodejs";

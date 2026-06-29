@@ -19,7 +19,7 @@ import {
   makeCorridorUsdc,
   scoreCorridors,
   SettlementMode,
-} from "@/lib/corridor";
+} from "@/lib/credit";
 import { assessCredit, type CreditAssessment, type Receivable } from "@/lib/credit";
 import type { Business as BizForCredit } from "@/lib/account";
 import {

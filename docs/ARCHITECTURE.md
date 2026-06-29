@@ -42,7 +42,7 @@ Settlement, release and the score update are one atomic on-chain transaction the
 
 ## Layers
 
-### Scoring engine — `lib/corridor.ts`
+### Scoring engine — `lib/credit.ts`
 Pure and chain-agnostic, and the single most important piece of shared logic. `scoreCorridors(corridors, now)` returns the Corridor Score as a transparent function of four factors: history (≤30), volume (≤25), proof performance (≤30), cadence (≤15). `ELIGIBLE_THRESHOLD = 70`. `advanceOffer(score)` sizes the working-capital offer. Imported on the client for the optimistic UI; the *canonical* score is the one computed on-chain by `DhowScoreRegistry._score`, which mirrors this same four-factor formula. Keep the two in lockstep — both sides must agree.
 
 ### Contracts — `contracts/src`
