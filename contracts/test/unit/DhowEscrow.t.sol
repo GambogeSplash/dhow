@@ -42,15 +42,15 @@ contract DhowEscrowTest is Test {
         escrow.lock(CID, supplier, AMOUNT, uint64(block.timestamp + 7 days));
     }
 
-    /// @dev Build a valid shipment-proof attestation for a corridor. The schema
-    ///      leads with the corridorId (static bytes32), matching the on-chain decode.
-    function _attestation(bytes32 corridorId, bytes32 schema, address attester)
+    /// @dev Build a valid shipment-proof attestation for a payment. The schema
+    ///      leads with the paymentId (static bytes32), matching the on-chain decode.
+    function _attestation(bytes32 paymentId, bytes32 schema, address attester)
         internal
         pure
         returns (IEAS.Attestation memory)
     {
         return IEAS.Attestation({
-            uid: keccak256(abi.encode(corridorId, attester)),
+            uid: keccak256(abi.encode(paymentId, attester)),
             schema: schema,
             time: 0,
             expirationTime: 0,
@@ -59,7 +59,7 @@ contract DhowEscrowTest is Test {
             recipient: address(0),
             attester: attester,
             revocable: true,
-            data: abi.encode(corridorId, "DHW-0412", "Bill of Lading", "Jebel Ali", uint64(0), address(0))
+            data: abi.encode(paymentId, "DHW-0412", "Bill of Lading", "Jebel Ali", uint64(0), address(0))
         });
     }
 
@@ -160,12 +160,12 @@ contract DhowEscrowTest is Test {
         escrow.releaseWithAttestation(CID, uid);
     }
 
-    function test_RejectsCorridorMismatch() public {
+    function test_RejectsPaymentMismatch() public {
         _lock();
-        bytes32 uid = keccak256("att-other-corridor");
+        bytes32 uid = keccak256("att-other-payment");
         _setAttestation(uid, _attestation(keccak256("DHW-9999"), SCHEMA, inspector));
 
-        vm.expectRevert(DhowEscrow.DhowEscrow__CorridorMismatch.selector);
+        vm.expectRevert(DhowEscrow.DhowEscrow__PaymentMismatch.selector);
         escrow.releaseWithAttestation(CID, uid);
     }
 
@@ -221,7 +221,7 @@ contract DhowEscrowTest is Test {
     function test_NoDoubleLock() public {
         vm.startPrank(payer);
         escrow.lock(CID, supplier, AMOUNT, uint64(block.timestamp + 7 days));
-        vm.expectRevert(DhowEscrow.DhowEscrow__CorridorExists.selector);
+        vm.expectRevert(DhowEscrow.DhowEscrow__PaymentExists.selector);
         escrow.lock(CID, supplier, AMOUNT, uint64(block.timestamp + 7 days));
         vm.stopPrank();
     }
