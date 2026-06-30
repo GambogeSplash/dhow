@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-/// @notice The Ethereum Attestation Service attestation record. Mirrors the
-///         canonical EAS struct so DhowEscrow can verify a shipment proof
-///         without pulling the full eas-contracts package as a dependency.
-
-/// @notice Minimal slice of the EAS interface DhowEscrow depends on.
+/**
+ * @title IEAS
+ * @author The team
+ * @notice Interface for interacting with the Ethereum Attestation Service. Mirrors the canonical EAS struct so DhowEscrow can verify a shipment proof without pulling the full eas-contracts package as a dependency.
+ * @dev This interface is a minimal slice of the EAS interface that DhowEscrow depends on. It allows DhowEscrow to verify a shipment proof without pulling the full eas-contracts package as a dependency.
+ */
 interface IEAS {
     struct Attestation {
         bytes32 uid; // Unique identifier of the attestation. question: how do users, banks, finaciers get this uid?
