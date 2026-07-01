@@ -18,7 +18,7 @@ import {IDhowScoreRegistry} from "./interfaces/IDhowScoreRegistry.sol";
 ///         is unavailable. Buyer is refunded after the deadline if no proof
 ///         arrives.
 contract DhowEscrow is Ownable, ReentrancyGuard {
-    /*//////////////////////////////////////////////////////////////
+    /*/////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
     error DhowEscrow__PaymentExists();

@@ -27,6 +27,7 @@ contract DhowScoreRegistry is Ownable {
         uint128 settledVolume; // cumulative settled USDC (6dp)
         uint64 firstSettledAt; // first clean settlement (ms-agnostic, unix secs)
         uint64 lastSettledAt; // most recent clean settlement
+        uint8 distinctCounterparties; // number of unique suppliers paid, capped at 255
         bytes32 lastAttestation; // proof UID behind the last settlement
     }
 
@@ -35,9 +36,7 @@ contract DhowScoreRegistry is Ownable {
     //////////////////////////////////////////////////////////////*/
     mapping(address business => Stats) public stats;
 
-    /// @notice The escrow contract authorised to record settlement facts. Set by
-    ///         the owner at wire-up; thereafter the score is driven by on-chain
-    ///         settlement, not by a privileged off-chain poster.
+    /// @notice The escrow contract authorised to record settlement facts. Set by the owner setRecorder thereafter the score is driven by on-chain settlement.
     address public recorder;
 
     uint16 public eligibleThreshold = 70;
@@ -83,11 +82,20 @@ contract DhowScoreRegistry is Ownable {
     /*//////////////////////////////////////////////////////////////
                             OWNER CONTROLS
     //////////////////////////////////////////////////////////////*/
+    /**
+     * @notice Changes which address is allowed to call recordSettlement. You'd use this if you redeploy the escrow contract and need to point the registry at the new address. Emits RecorderChanged.
+     * @param recorder_ the new escrow contract address that is allowed to call recordSettlement.
+     */
     function setRecorder(address recorder_) external onlyOwner {
         recorder = recorder_;
         emit RecorderChanged(recorder_);
     }
 
+    /**
+     * @notice Changes the score cutoffs for eligibility (default 70) and preferred status (default 88). The only validation is that eligible_ ≤ preferred_ ≤ 100 — otherwise it reverts with InvalidThresholds. Emits ThresholdsChanged.
+     * @param eligible_ The new score cutoff for eligibility (0..100).
+     * @param preferred_ The new score cutoff for preferred status (0..100).
+     */
     function setThresholds(uint16 eligible_, uint16 preferred_) external onlyOwner {
         if (eligible_ > preferred_ || preferred_ > 100) revert DhowScoreRegistry__InvalidThresholds();
         eligibleThreshold = eligible_;
@@ -112,7 +120,7 @@ contract DhowScoreRegistry is Ownable {
         Stats storage s = stats[business];
         if (success) {
             s.settledCount += 1;
-            s.settledVolume += uint128(amount);
+            s.settledVolume += uint128(amount); // to-do: OZ downcast
             if (s.firstSettledAt == 0) s.firstSettledAt = uint64(block.timestamp);
             s.lastSettledAt = uint64(block.timestamp);
             s.lastAttestation = attestationUid;
