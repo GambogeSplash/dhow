@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /// @title DhowScoreRegistry — on-chain trade-credit reputation, computed from facts.
 /// @notice The underwriting primitive, on-chain. The registry stores the RAW
@@ -16,8 +17,19 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         event-indexed, permissionlessly readable.
 contract DhowScoreRegistry is Ownable {
     /*//////////////////////////////////////////////////////////////
+                                ERRORS
+    //////////////////////////////////////////////////////////////*/
+    error DhowScoreRegistry__NotRecorder();
+    error DhowScoreRegistry__InvalidThresholds();
+
+    /*//////////////////////////////////////////////////////////////
                            TYPE DECLARATIONS
     //////////////////////////////////////////////////////////////*/
+    using SafeCast for uint256;
+    using SafeCast for int256;
+
+
+
     /// @notice Immutable settlement facts for a business, appended atomically by
     ///         the escrow on every release/refund. Sufficient to recompute the
     ///         score with no off-chain input beyond the current block time.
@@ -41,19 +53,20 @@ contract DhowScoreRegistry is Ownable {
 
     uint16 public eligibleThreshold = 70;
     uint16 public preferredThreshold = 88;
+    uint16 public constant MAX_THRESHOLD = 100;
 
     /*//////////////////////////////////////////////////////////////
                           SCORING CONSTANTS
     //////////////////////////////////////////////////////////////*/
     // Mirrors creditScore in lib/credit.ts: history(30) + volume(25) + performance(30) + cadence(15) = 100.
-    uint256 internal constant W_HISTORY = 30;
-    uint256 internal constant W_VOLUME = 25;
-    uint256 internal constant W_PERFORMANCE = 30;
-    uint256 internal constant W_CADENCE = 15;
-    uint64 internal constant HISTORY_CAP = 6; // settlements for full history credit
+    uint256 private constant W_HISTORY = 30;
+    uint256 private constant W_VOLUME = 25;
+    uint256 private constant W_PERFORMANCE = 30;
+    uint256 private constant W_CADENCE = 15;
+    uint64 private constant HISTORY_CAP = 6; // settlements for full history credit
     // Volume cap: AED 1,000,000 ≈ 272,294 USDC at the CBUAE peg (3.6725), in 6dp.
-    uint128 internal constant VOLUME_CAP = 272_294_000_000;
-    uint64 internal constant CADENCE_WINDOW = 45 days; // recency decay window
+    uint128 private constant VOLUME_CAP = 272_294_000_000;
+    uint64 private constant CADENCE_WINDOW = 45 days; // recency decay window
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -64,11 +77,7 @@ contract DhowScoreRegistry is Ownable {
     event RecorderChanged(address indexed recorder);
     event ThresholdsChanged(uint16 eligible, uint16 preferred);
 
-    /*//////////////////////////////////////////////////////////////
-                                ERRORS
-    //////////////////////////////////////////////////////////////*/
-    error DhowScoreRegistry__NotRecorder();
-    error DhowScoreRegistry__InvalidThresholds();
+  
 
     modifier onlyRecorder() {
         if (msg.sender != recorder) revert DhowScoreRegistry__NotRecorder();
@@ -97,7 +106,7 @@ contract DhowScoreRegistry is Ownable {
      * @param preferred_ The new score cutoff for preferred status (0..100).
      */
     function setThresholds(uint16 eligible_, uint16 preferred_) external onlyOwner {
-        if (eligible_ > preferred_ || preferred_ > 100) revert DhowScoreRegistry__InvalidThresholds();
+        if (eligible_ > preferred_ || preferred_ > MAX_THRESHOLD) revert DhowScoreRegistry__InvalidThresholds();
         eligibleThreshold = eligible_;
         preferredThreshold = preferred_;
         emit ThresholdsChanged(eligible_, preferred_);
@@ -120,7 +129,7 @@ contract DhowScoreRegistry is Ownable {
         Stats storage s = stats[business];
         if (success) {
             s.settledCount += 1;
-            s.settledVolume += uint128(amount); // to-do: OZ downcast
+            s.settledVolume += amount.toUint128(); // to-do: OZ downcast
             if (s.firstSettledAt == 0) s.firstSettledAt = uint64(block.timestamp);
             s.lastSettledAt = uint64(block.timestamp);
             s.lastAttestation = attestationUid;

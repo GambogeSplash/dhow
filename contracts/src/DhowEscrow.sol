@@ -34,6 +34,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     error DhowEscrow__WrongAttester();
     error DhowEscrow__PaymentMismatch();
     error DhowEscrow__InvalidInspector();
+    error DhowEscrow__InvalidRegistry();
 
     /*//////////////////////////////////////////////////////////////
                         TYPE DECLARATIONS
@@ -98,11 +99,13 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     {
         if (token_ == address(0)) revert DhowEscrow__InvalidSupplier();
         if (inspector_ == address(0)) revert DhowEscrow__InvalidInspector();
+        if (registry_ == address(0)) revert DhowEscrow__InvalidRegistry();
 
         I_TOKEN = IERC20(token_);
         I_EAS = IEAS(eas_);
         I_SHIPMENT_SCHEMA = shipmentSchema_;
         inspector = inspector_;
+
         requireEas = true;
         registry = IDhowScoreRegistry(registry_);
     }
@@ -113,6 +116,8 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /// @notice Point the escrow at the on-chain score registry. The registry must
     ///         in turn set this escrow as its `recorder`.
     function setRegistry(address registry_) external onlyOwner {
+        if (registry_ == address(0)) revert DhowEscrow__InvalidRegistry();
+
         registry = IDhowScoreRegistry(registry_);
         emit RegistryChanged(registry_);
     }
