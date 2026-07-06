@@ -14,14 +14,14 @@ contract DhowEscrowTest is Test {
     DhowEscrow escrow;
     DhowScoreRegistry registry;
 
-    address payer = address(0xA11CE);
-    address supplier = address(0xB0B);
-    address inspector = address(0x1453);
-    address stranger = address(0xDEAD);
+    address public payer = makeAddr("payer");
+    address public supplier = makeAddr("supplier");
+    address public inspector = makeAddr("inspector");
+    address public stranger = makeAddr("stanger");
 
-    bytes32 constant CID = keccak256("DHW-0412");
-    bytes32 constant SCHEMA = keccak256("shipment-proof");
-    uint256 constant AMOUNT = 112_185_160_000; // 112,185.16 USDC (6dp)
+    bytes32 public constant CID = keccak256("DHW-0412");
+    bytes32 public constant SCHEMA = keccak256("shipment-proof");
+    uint256 public constant AMOUNT = 112_185_160_000; // 112,185.16 USDC (6dp)
 
     function setUp() public {
         usdc = new MockUSDC();
@@ -67,7 +67,7 @@ contract DhowEscrowTest is Test {
         eas.set(uid, att);
     }
 
-    function test_LockPullsFunds() public {
+    function testLockPullsFunds() public {
         _lock();
         assertEq(usdc.balanceOf(address(escrow)), AMOUNT);
         DhowEscrow.Lock memory l = escrow.getLock(CID);
@@ -75,7 +75,7 @@ contract DhowEscrowTest is Test {
         assertEq(l.supplier, supplier);
     }
 
-    function test_ReleaseWithValidAttestation() public {
+    function testReleaseWithValidAttestation() public {
         _lock();
         bytes32 uid = keccak256("att-1");
         _setAttestation(uid, _attestation(CID, SCHEMA, inspector));
@@ -91,7 +91,7 @@ contract DhowEscrowTest is Test {
 
     /// @notice The headline fix: settlement records the fact on-chain in the same
     ///         tx, so the credit score moves with the money — no backend needed.
-    function test_ReleaseRecordsSettlementOnChain() public {
+    function testReleaseRecordsSettlementOnChain() public {
         _lock();
         bytes32 uid = keccak256("att-record");
         _setAttestation(uid, _attestation(CID, SCHEMA, inspector));
@@ -105,14 +105,17 @@ contract DhowEscrowTest is Test {
         assertGt(registry.scoreOf(payer), 0);
     }
 
-    function test_RefundRecordsRefundOnChain() public {
+    function testRefundRecordsRefundOnChain() public {
+        // ARRANGE
         uint64 deadline = uint64(block.timestamp + 7 days);
         vm.prank(payer);
         escrow.lock(CID, supplier, AMOUNT, deadline);
 
+        // ACT
         vm.warp(deadline + 1);
         escrow.refund(CID);
 
+        // ASSERT
         DhowScoreRegistry.Stats memory s = registry.statsOf(payer);
         assertEq(s.refundedCount, 1);
         assertEq(s.settledCount, 0);
@@ -120,7 +123,7 @@ contract DhowEscrowTest is Test {
 
     /// @notice Settlement must never be blocked by reputation accounting. With the
     ///         registry unset, release still moves the money cleanly.
-    function test_ReleaseSucceedsWithoutRegistry() public {
+    function testReleaseSucceedsWithoutRegistry() public {
         escrow.setRegistry(address(0));
         _lock();
         bytes32 uid = keccak256("att-noreg");
@@ -131,7 +134,7 @@ contract DhowEscrowTest is Test {
         assertEq(uint8(escrow.getLock(CID).status), uint8(DhowEscrow.Status.Released));
     }
 
-    function test_RejectsWrongSchema() public {
+    function testRevertsIfWrongSchema() public {
         _lock();
         bytes32 uid = keccak256("att-wrong-schema");
         _setAttestation(uid, _attestation(CID, keccak256("other-schema"), inspector));
@@ -140,7 +143,7 @@ contract DhowEscrowTest is Test {
         escrow.releaseWithAttestation(CID, uid);
     }
 
-    function test_RejectsWrongAttester() public {
+    function testRevertsIfWrongAttester() public {
         _lock();
         bytes32 uid = keccak256("att-wrong-attester");
         _setAttestation(uid, _attestation(CID, SCHEMA, stranger));
@@ -149,7 +152,7 @@ contract DhowEscrowTest is Test {
         escrow.releaseWithAttestation(CID, uid);
     }
 
-    function test_RejectsRevokedAttestation() public {
+    function testRevertsIfRevokedAttestation() public {
         _lock();
         bytes32 uid = keccak256("att-revoked");
         IEAS.Attestation memory att = _attestation(CID, SCHEMA, inspector);
@@ -160,7 +163,7 @@ contract DhowEscrowTest is Test {
         escrow.releaseWithAttestation(CID, uid);
     }
 
-    function test_RejectsPaymentMismatch() public {
+    function testRevertsIfPaymentMismatch() public {
         _lock();
         bytes32 uid = keccak256("att-other-payment");
         _setAttestation(uid, _attestation(keccak256("DHW-9999"), SCHEMA, inspector));
@@ -169,7 +172,7 @@ contract DhowEscrowTest is Test {
         escrow.releaseWithAttestation(CID, uid);
     }
 
-    function test_FallbackReleaseOnlyWhenEasOff() public {
+    function testFallbackReleaseOnlyWhenEasOff() public {
         _lock();
 
         // While requireEas is on, the inspector fallback is blocked.
@@ -188,7 +191,7 @@ contract DhowEscrowTest is Test {
         assertEq(registry.statsOf(payer).settledCount, 1);
     }
 
-    function test_FallbackRejectsStranger() public {
+    function testFallbackRejectsStranger() public {
         _lock();
         escrow.setRequireEas(false);
 
@@ -197,7 +200,7 @@ contract DhowEscrowTest is Test {
         escrow.releaseByInspector(CID, keccak256("spoof"));
     }
 
-    function test_RefundAfterDeadline() public {
+    function testRefundAfterDeadline() public {
         uint64 deadline = uint64(block.timestamp + 7 days);
         vm.prank(payer);
         escrow.lock(CID, supplier, AMOUNT, deadline);
@@ -209,7 +212,7 @@ contract DhowEscrowTest is Test {
         assertEq(uint8(escrow.getLock(CID).status), uint8(DhowEscrow.Status.Refunded));
     }
 
-    function test_NoRefundBeforeDeadline() public {
+    function testNoRefundBeforeDeadline() public {
         uint64 deadline = uint64(block.timestamp + 7 days);
         vm.prank(payer);
         escrow.lock(CID, supplier, AMOUNT, deadline);
@@ -218,7 +221,7 @@ contract DhowEscrowTest is Test {
         escrow.refund(CID);
     }
 
-    function test_NoDoubleLock() public {
+    function testNoDoubleLock() public {
         vm.startPrank(payer);
         escrow.lock(CID, supplier, AMOUNT, uint64(block.timestamp + 7 days));
         vm.expectRevert(DhowEscrow.DhowEscrow__PaymentExists.selector);

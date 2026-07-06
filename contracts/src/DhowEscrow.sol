@@ -17,6 +17,14 @@ import {IDhowScoreRegistry} from "./interfaces/IDhowScoreRegistry.sol";
 ///         the owner has flipped `requireEas` off, for environments where EAS
 ///         is unavailable. Buyer is refunded after the deadline if no proof
 ///         arrives.
+/**
+ * @title DhowEscrow
+ * @author @FemiOje @GambogeSplash @Kelechikizito
+ * @notice  Holds USDC for a payment and releases to the supplier when the shipment proof is attested. 
+ * The release is gated on a real EAS attestation signed by a trusted inspector: the attestation IS the authorisation, so release is permissionless once one exists. 
+ * A role-based fallback (`releaseByInspector`) stays available only when the owner has flipped `requireEas` off, for environments where EAS is unavailable. 
+ * Buyer is refunded after the deadline if no proof arrives.
+ */
 contract DhowEscrow is Ownable, ReentrancyGuard {
     /*/////////////////////////////////////////////////////////////
                                  ERRORS
@@ -34,6 +42,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     error DhowEscrow__WrongAttester();
     error DhowEscrow__PaymentMismatch();
     error DhowEscrow__InvalidInspector();
+    error DhowEscrow__InvalidEAS();
     error DhowEscrow__InvalidRegistry();
 
     /*//////////////////////////////////////////////////////////////
@@ -42,72 +51,82 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     enum Status {
-        None,
-        Locked,
-        Released,
-        Refunded
+        None, // None/0 is the default value for an uninitialized paymentId. PS: None is never explicitly initialised — it's the absence of initialisation that makes it None.
+        Locked, // Locked/1 is when the buyer/payer has deposited USDC and it's sitting in the escrow waiting for proof.
+        Released, // Released/2 is when the inspector has attested the proof and the escrow has released the USDC to the supplier.
+        Refunded // Refunded/3 is when the buyer/payer has been refunded after the deadline because no proof was attested.
     }
 
     struct Lock {
-        address payer;
-        address supplier;
-        uint256 amount;
-        uint64 deadline;
-        Status status;
+        address payer; // The payer or buyer is the importer that pays the suppliers in stablecoin.
+        address supplier; // The supplier or overseas seller is the exporter being paid in stablecoin. Suppliers receive USDC into their wallet when _release() calls token.safeTransfer(l.supplier, l.amount). 
+        uint256 amount; // This is the amount of USDC/stablecoin locked for the payment
+        uint64 deadline; // The deadline is the unix timestamp after which the payer can be refunded if no proof has been attested.
+        Status status; // The status of the payment represented by an enum: None, Locked, Released, Refunded
     }
 
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
-    IERC20 public immutable I_TOKEN;
-    IEAS public immutable I_EAS;
-    bytes32 public immutable I_SHIPMENT_SCHEMA;
+    /// @dev The interface to the stablecoiun used for payments. In this case, and erc20 token.
+    IERC20 private immutable I_TOKEN;
+    /// @dev The interface to the EAS contract used to verify the shipment proof attestation. 
+    IEAS private immutable I_EAS;
+    /// @dev The schema used to verify the shipment proof attestation.
+    bytes32 private immutable I_SHIPMENT_SCHEMA;
+    /// @dev The interface of the on-chain credit registry notified on every settlement.
+    IDhowScoreRegistry private immutable I_REGISTRY;
 
-    /// @notice The inspector authorised to attest shipment proof (e.g. Gulf Inspectorate). Used as the expected EAS attester and, when `requireEas` is off, as the role allowed to release directly.
-    address public inspector;
-    /// @notice When true, release requires a valid EAS attestation. The owner can flip this off as a stage fallback if EAS is unavailable.
-    bool public requireEas;
+    /// @dev The address of the inspector authorised to attest shipment proof (e.g. Gulf Inspectorate) as long as `requireEas` is true. The inspector is the only address that can call `releaseByInspector()` when EAS is unavailable.
+    /// @notice The inspector is a trusted real-world entity (like Gulf Inspectorate) whose job is to physically verify that goods arrived and then sign an on-chain attestation confirming it — that signature is what unlocks the USDC from escrow to the supplier.
+    address private s_inspector;
+    /// @dev When true, release requires a valid EAS attestation. The owner can flip this off if EAS is unavailable.
+    bool private s_requireEas;
 
-    /// @notice On-chain credit registry notified atomically on every settlement.
-    ///         When unset (address(0)) settlement still works; only the reputation
-    ///         side-effect is skipped. The registry call can never block a
-    ///         release/refund (it is wrapped in try/catch).
-    IDhowScoreRegistry public registry;
-
-    mapping(bytes32 paymentId => Lock) public locks;
+    /// @dev The locks mapping maps every paymentId to its Lock struct, which contains the payer, supplier, amount, deadline, and status of the payment.
+    mapping(bytes32 paymentId => Lock) private s_locks;
 
     /*/////////////////////////////////////////////////////////
                             EVENTS
     /////////////////////////////////////////////////////////*/
+    /// @notice This event is emitted when a payment is locked in escrow. It contains the paymentId, payer, supplier, amount, and deadline.
     event Locked(
         bytes32 indexed paymentId, address indexed payer, address indexed supplier, uint256 amount, uint64 deadline
     );
+    /// @notice This event is emitted when a payment is released to the supplier. It contains the paymentId, supplier, amount, and attestationUid.
     event Released(bytes32 indexed paymentId, address indexed supplier, uint256 amount, bytes32 attestationUid);
+    /// @notice This event is emitted when a payment is refunded to the payer after the deadline. It contains the paymentId, payer, and amount.
     event Refunded(bytes32 indexed paymentId, address indexed payer, uint256 amount);
+    /// @notice This event is emitted when the inspector address is changed. It contains the new inspector address.
     event InspectorChanged(address indexed inspector);
+    /// @notice This event is emitted when the requireEas boolean flag is changed. It contains the new boolean value of requireEas.
     event RequireEasChanged(bool requireEas);
-    event RegistryChanged(address indexed registry);
-    /// @notice Emitted when settlement succeeded but the registry notification
-    ///         reverted. Money moved; only the reputation write was skipped.
+    /// @notice Emitted when settlement succeeded but the registry notification reverted. Money moved; only the reputation write was skipped.
     event SettlementRecordFailed(bytes32 indexed paymentId, address indexed business, bool success);
+    // event RegistryChanged(address indexed registry);
 
     /*/////////////////////////////////////////////////////////
                             CONSTRUCTOR
     /////////////////////////////////////////////////////////*/
+    /// @dev The constructor sets the immutable addresses of the stablecoin, EAS, shipment schema,and registry. The inspector address isn't immuatable. The constructor also sets the s_requireEs flag to true.
+    /// @notice question: Right now, the Escrow deployer is the owner. Should this be case, given the owner has certain privileges?
     constructor(address token_, address eas_, bytes32 shipmentSchema_, address inspector_, address registry_)
         Ownable(msg.sender)
     {
+        // Checks to validate addresses
         if (token_ == address(0)) revert DhowEscrow__InvalidSupplier();
         if (inspector_ == address(0)) revert DhowEscrow__InvalidInspector();
+        if (eas_ == address(0)) revert DhowEscrow__InvalidEAS();
         if (registry_ == address(0)) revert DhowEscrow__InvalidRegistry();
 
+        // Intialize the immutable and storage state variables
         I_TOKEN = IERC20(token_);
         I_EAS = IEAS(eas_);
         I_SHIPMENT_SCHEMA = shipmentSchema_;
-        inspector = inspector_;
+        s_inspector = inspector_;
 
-        requireEas = true;
-        registry = IDhowScoreRegistry(registry_);
+        s_requireEas = true;
+        I_REGISTRY = IDhowScoreRegistry(registry_);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -115,47 +134,71 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     //////////////////////////////////////////////////////////////*/
     /// @notice Point the escrow at the on-chain score registry. The registry must
     ///         in turn set this escrow as its `recorder`.
-    function setRegistry(address registry_) external onlyOwner {
-        if (registry_ == address(0)) revert DhowEscrow__InvalidRegistry();
+    // function setRegistry(address registry_) external onlyOwner {
+    //     if (registry_ == address(0)) revert DhowEscrow__InvalidRegistry();
 
-        registry = IDhowScoreRegistry(registry_);
-        emit RegistryChanged(registry_);
-    }
+    //     I_REGISTRY = IDhowScoreRegistry(registry_);
+    //     emit RegistryChanged(registry_);
+    // } // commented out because the registry is now immutable and set in the constructor.
 
+    /**
+     * @dev Setter function to change the inspector address, only callable by the owner. Emits InspectorChanged event.
+     * @param inspector_ The new inspector address to be set.
+     */
     function setInspector(address inspector_) external onlyOwner {
         if (inspector_ == address(0)) revert DhowEscrow__InvalidInspector();
 
-        inspector = inspector_;
+        s_inspector = inspector_;
 
-        emit InspectorChanged(inspector_);
+        emit InspectorChanged(s_inspector);
     }
 
+    /**
+     * @dev Setter function to change the requireEas boolean flag, only callable by the owner. Emits RequireEasChanged event.
+     * @param requireEas_ The new boolean value to be set for requireEas.
+     */
     function setRequireEas(bool requireEas_) external onlyOwner {
-        requireEas = requireEas_;
+        s_requireEas = requireEas_;
         emit RequireEasChanged(requireEas_);
     }
 
-    /// @notice Lock funds for a payment. Payer must have approved this contract.
+    /**
+     * @notice Lock funds for a payment. Payer must have approved this contract.
+     * @dev External function to lock funds for a payment.
+     * @param paymentId The ID of the payment to lock.
+     * @param supplier The address of the supplier.
+     * @param amount The amount of funds to lock.
+     * @param deadline The deadline for the payment.
+     */
     function lock(bytes32 paymentId, address supplier, uint256 amount, uint64 deadline) external nonReentrant {
         _lock(paymentId, supplier, amount, deadline);
     }
 
-    /// @notice Release funds against a real EAS shipment-proof attestation.
-    ///         Permissionless: the attestation is the authorisation. Verifies
-    ///         the attestation is the right schema, not revoked, not expired,
-    ///         signed by the trusted inspector, and bound to this payment.
+    
+    /**
+     * @notice Release funds against a real EAS shipment-proof attestation. This is the primary release path, used when requireEas = true.
+     * @dev External function to release funds against a real EAS shipment-proof attestation.
+     * @param paymentId The ID of the payment to release.
+     * @param attestationUid The UID of the EAS attestation.
+     */
     function releaseWithAttestation(bytes32 paymentId, bytes32 attestationUid) external nonReentrant {
         _releaseWithAttestation(paymentId, attestationUid);
     }
 
-    /// @notice Fallback release by the trusted inspector, available only when
-    ///         the owner has turned `requireEas` off (EAS unavailable). Still a
-    ///         real on-chain release; identical settlement, weaker proof trail.
+    /**
+     * @notice Fallback release by the trusted inspector. Used when requireEas = false. Only the inspector address can call this 
+     * @param paymentId The ID of the payment to release.
+     * @param proofRef The reference for the proof. proofRef is just a bytes32 value the inspector passes in to reference whatever off-chain proof they used to verify the shipment — a document hash, a reference number, anything.
+     */
     function releaseByInspector(bytes32 paymentId, bytes32 proofRef) external nonReentrant {
         _release(paymentId, proofRef);
     }
 
-    /// @notice Refund the payer after the deadline if no proof was attested.
+    /**
+     * @notice Refund the payer after the deadline if no proof was attested.
+     * @dev External function to refund the payer after the deadline if no proof was attested.
+     * @param paymentId The ID of the payment to refund.
+     */
     function refund(bytes32 paymentId) external nonReentrant {
         _refund(paymentId);
     }
@@ -163,12 +206,20 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /*////////////////////////////////////////////////////////////////
                         INTERNAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
+    /**
+     * @notice Lock funds for a payment. Payer must have approved this contract.
+     * @dev Internal function to lock funds for a payment.
+     * @param paymentId The ID of the payment to lock.
+     * @param supplier The address of the supplier.
+     * @param amount The amount of funds to lock.
+     * @param deadline The deadline for the payment.
+     */
     function _lock(bytes32 paymentId, address supplier, uint256 amount, uint64 deadline) internal {
-        if (locks[paymentId].status != Status.None) revert DhowEscrow__PaymentExists();
+        if (s_locks[paymentId].status != Status.None) revert DhowEscrow__PaymentExists();
         if (supplier == address(0)) revert DhowEscrow__InvalidSupplier();
         if (amount == 0) revert DhowEscrow__InvalidAmount();
 
-        locks[paymentId] =
+        s_locks[paymentId] =
             Lock({payer: msg.sender, supplier: supplier, amount: amount, deadline: deadline, status: Status.Locked});
 
         I_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
@@ -176,14 +227,20 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         emit Locked(paymentId, msg.sender, supplier, amount, deadline);
     }
 
+    /**
+     * @notice Release funds against a real EAS shipment-proof attestation. This is the primary release path, used when requireEas = true.
+     * @dev Internal function to release funds against a real EAS shipment-proof attestation.
+     * @param paymentId The ID of the payment to release.
+     * @param attestationUid The UID of the EAS attestation.
+     */
     function _releaseWithAttestation(bytes32 paymentId, bytes32 attestationUid) internal {
-        if (!requireEas) revert DhowEscrow__EasRequired(); // when EAS is off, use releaseByInspector
+        if (!s_requireEas) revert DhowEscrow__EasRequired(); // when EAS is off, use releaseByInspector
 
         IEAS.Attestation memory att = I_EAS.getAttestation(attestationUid);
         if (att.schema != I_SHIPMENT_SCHEMA) revert DhowEscrow__WrongSchema();
         if (att.revocationTime != 0) revert DhowEscrow__AttestationRevoked();
         if (att.expirationTime != 0 && att.expirationTime <= block.timestamp) revert DhowEscrow__AttestationExpired();
-        if (att.attester != inspector) revert DhowEscrow__WrongAttester();
+        if (att.attester != s_inspector) revert DhowEscrow__WrongAttester();
 
         // The schema leads with the paymentId (static bytes32), so decoding the
         // prefix binds the attestation to this payment and blocks replay.
@@ -196,8 +253,8 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /// @dev Inspector fallback path, gated on EAS being turned off. The release
     ///      itself is performed by the shared `_settle` core.
     function _release(bytes32 paymentId, bytes32 proofRef) internal {
-        if (requireEas) revert DhowEscrow__EasRequired();
-        if (msg.sender != inspector) revert DhowEscrow__NotInspector();
+        if (s_requireEas) revert DhowEscrow__EasRequired();
+        if (msg.sender != s_inspector) revert DhowEscrow__NotInspector();
         _settle(paymentId, proofRef);
     }
 
@@ -206,7 +263,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     ///      same transaction. The release-path guards live in the callers, so
     ///      this never carries a contradictory `requireEas` condition.
     function _settle(bytes32 paymentId, bytes32 attestationUid) internal {
-        Lock storage l = locks[paymentId];
+        Lock storage l = s_locks[paymentId];
         if (l.status != Status.Locked) revert DhowEscrow__NotLocked();
 
         l.status = Status.Released;
@@ -216,8 +273,13 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         _recordSettlement(paymentId, l.payer, l.amount, true, attestationUid);
     }
 
+    /**
+     * @notice Refund the payer after the deadline if no proof was attested.
+     * @dev Internal function to refund the payer after the deadline if no proof was attested.
+     * @param paymentId The ID of the payment to refund.
+     */
     function _refund(bytes32 paymentId) internal {
-        Lock storage l = locks[paymentId];
+        Lock storage l = s_locks[paymentId];
         if (l.status != Status.Locked) revert DhowEscrow__NotLocked();
         if (block.timestamp <= l.deadline) revert DhowEscrow__NotExpired();
 
@@ -238,7 +300,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         bool success,
         bytes32 attestationUid
     ) internal {
-        IDhowScoreRegistry r = registry;
+        IDhowScoreRegistry r = I_REGISTRY;
         if (address(r) == address(0)) return;
         try r.recordSettlement(business, amount, success, attestationUid) {}
         catch {
@@ -249,10 +311,14 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
                     EXTERNAL VIEW & PURE FUNCTIONS
     //////////////////////////////////////////////////////////////*/
     function getLock(bytes32 paymentId) external view returns (Lock memory) {
-        return locks[paymentId];
+        return s_locks[paymentId];
     }
 
     function getInspector() external view returns (address) {
-        return inspector;
+        return s_inspector;
+    }
+
+    function getRegistry() external view returns (address) {
+        return address(I_REGISTRY);
     }
 }

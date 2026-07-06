@@ -3,6 +3,8 @@ pragma solidity 0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {IDhowScoreRegistry} from "./interfaces/IDhowScoreRegistry.sol";
+
 
 /// @title DhowScoreRegistry — on-chain trade-credit reputation, computed from facts.
 /// @notice The underwriting primitive, on-chain. The registry stores the RAW
@@ -15,7 +17,7 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 ///         still updates on-chain and any financier can recompute it from the
 ///         immutable facts. ERC-8004-flavoured: identity-addressed,
 ///         event-indexed, permissionlessly readable.
-contract DhowScoreRegistry is Ownable {
+contract DhowScoreRegistry is Ownable, IDhowScoreRegistry {
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -41,6 +43,7 @@ contract DhowScoreRegistry is Ownable {
         uint64 lastSettledAt; // most recent clean settlement
         uint8 distinctCounterparties; // number of unique suppliers paid, capped at 255
         bytes32 lastAttestation; // proof UID behind the last settlement
+
     }
 
     /*//////////////////////////////////////////////////////////////
