@@ -318,6 +318,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /**
      * @dev Returns the Lock struct for a given paymentId.
      * @param paymentId The ID of the payment for which to retrieve the lock.
+     * @return The Lock struct
      */
     function getLock(bytes32 paymentId) external view returns (Lock memory) {
         return s_locks[paymentId];
@@ -325,6 +326,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
 
     /**
      * @dev Returns the current inspector address.
+     * @return The inspector address
      */
     function getInspector() external view returns (address) {
         return s_inspector;
@@ -332,6 +334,7 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
 
     /**
      * @dev Returns the current registry address.
+     * @return The registry address
      */
     function getRegistry() external view returns (address) {
         return address(I_REGISTRY);

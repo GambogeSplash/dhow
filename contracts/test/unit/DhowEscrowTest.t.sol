@@ -2,14 +2,15 @@
 pragma solidity 0.8.24;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {MockUSDC} from "../../src/MockUSDC.sol";
+// import {MockUSDC} from "../../src/MockUSDC.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {DhowEscrow} from "../../src/DhowEscrow.sol";
 import {DhowScoreRegistry} from "../../src/DhowScoreRegistry.sol";
 import {IEAS} from "../../src/interfaces/IEAS.sol";
 import {MockEAS} from "../mocks/MockEAS.sol";
 
 contract DhowEscrowTest is Test {
-    MockUSDC usdc;
+    ERC20Mock usdc;
     MockEAS eas;
     DhowEscrow escrow;
     DhowScoreRegistry registry;
@@ -24,7 +25,7 @@ contract DhowEscrowTest is Test {
     uint256 public constant AMOUNT = 112_185_160_000; // 112,185.16 USDC (6dp)
 
     function setUp() public {
-        usdc = new MockUSDC();
+        usdc = new ERC20Mock();
         eas = new MockEAS();
         // Wire the same way the deploy script does: registry first (recorder
         // unset), escrow pointing at it, then escrow set as the recorder.
@@ -32,7 +33,7 @@ contract DhowEscrowTest is Test {
         escrow = new DhowEscrow(address(usdc), address(eas), SCHEMA, inspector, address(registry));
         registry.setRecorder(address(escrow));
 
-        usdc.mint(payer, 1_000_000_000_000);
+        usdc.mint(payer, 1_000_000e6);
         vm.prank(payer);
         usdc.approve(address(escrow), type(uint256).max);
     }
@@ -208,7 +209,7 @@ contract DhowEscrowTest is Test {
         vm.warp(deadline + 1);
         escrow.refund(CID);
 
-        assertEq(usdc.balanceOf(payer), 1_000_000_000_000);
+        assertEq(usdc.balanceOf(payer), 1_000_000e6);
         assertEq(uint8(escrow.getLock(CID).status), uint8(DhowEscrow.Status.Refunded));
     }
 
