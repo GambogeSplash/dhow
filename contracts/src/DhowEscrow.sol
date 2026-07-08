@@ -8,15 +8,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IEAS} from "./interfaces/IEAS.sol";
 import {IDhowScoreRegistry} from "./interfaces/IDhowScoreRegistry.sol";
 
-/// @title DhowEscrow — Proof-Lock conditional settlement.
-/// @notice Holds USDC for a payment and releases to the supplier when the
-///         shipment proof is attested. The release is gated on a real EAS
-///         attestation signed by a trusted inspector: the attestation IS the
-///         authorisation, so release is permissionless once one exists. A
-///         role-based fallback (`releaseByInspector`) stays available only when
-///         the owner has flipped `requireEas` off, for environments where EAS
-///         is unavailable. Buyer is refunded after the deadline if no proof
-///         arrives.
 /**
  * @title DhowEscrow
  * @author @FemiOje @GambogeSplash @Kelechikizito
@@ -250,18 +241,26 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         _settle(paymentId, attestationUid);
     }
 
-    /// @dev Inspector fallback path, gated on EAS being turned off. The release
-    ///      itself is performed by the shared `_settle` core.
+    /**
+     * @notice Release funds without an EAS attestation.
+     * @dev Internal function to release funds without an EAS attestation.
+     * @param paymentId The ID of the payment to release.
+     * @param proofRef The reference to the proof of shipment.
+     */
     function _release(bytes32 paymentId, bytes32 proofRef) internal {
         if (s_requireEas) revert DhowEscrow__EasRequired();
         if (msg.sender != s_inspector) revert DhowEscrow__NotInspector();
         _settle(paymentId, proofRef);
     }
 
-    /// @dev The settlement core, shared by the attestation and inspector paths.
-    ///      Moves the money, then records the settlement fact on-chain in the
-    ///      same transaction. The release-path guards live in the callers, so
-    ///      this never carries a contradictory `requireEas` condition.
+    /**
+     * @notice The settlement core, shared by the attestation and inspector paths.
+     * @dev Moves the money, then records the settlement fact on-chain in the
+     *      same transaction. The release-path guards live in the callers, so
+     *      this never carries a contradictory `requireEas` condition.
+     * @param paymentId The ID of the payment to settle.
+     * @param attestationUid The UID of the EAS attestation.
+     */
     function _settle(bytes32 paymentId, bytes32 attestationUid) internal {
         Lock storage l = s_locks[paymentId];
         if (l.status != Status.Locked) revert DhowEscrow__NotLocked();
@@ -290,9 +289,15 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
         _recordSettlement(paymentId, l.payer, l.amount, false, bytes32(0));
     }
 
-    /// @dev Notify the on-chain registry of a settlement. Wrapped in try/catch so
-    ///      a misconfigured or paused registry can never block the money moving;
-    ///      a failed notification surfaces as an event for off-chain repair.
+    /**
+     * @notice Notify the on-chain registry of a settlement.
+     * @dev Wrapped in try/catch so a misconfigured or paused registry can never block the money moving; a failed notification surfaces as an event for off-chain repair.
+     * @param paymentId The ID of the payment to record.
+     * @param business The address of the business involved.
+     * @param amount The amount of the payment.
+     * @param success The success status of the settlement.
+     * @param attestationUid The UID of the EAS attestation.
+     */
     function _recordSettlement(
         bytes32 paymentId,
         address business,
@@ -310,14 +315,24 @@ contract DhowEscrow is Ownable, ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
                     EXTERNAL VIEW & PURE FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    /**
+     * @dev Returns the Lock struct for a given paymentId.
+     * @param paymentId The ID of the payment for which to retrieve the lock.
+     */
     function getLock(bytes32 paymentId) external view returns (Lock memory) {
         return s_locks[paymentId];
     }
 
+    /**
+     * @dev Returns the current inspector address.
+     */
     function getInspector() external view returns (address) {
         return s_inspector;
     }
 
+    /**
+     * @dev Returns the current registry address.
+     */
     function getRegistry() external view returns (address) {
         return address(I_REGISTRY);
     }
