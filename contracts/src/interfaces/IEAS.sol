@@ -9,7 +9,7 @@ pragma solidity 0.8.24;
  */
 interface IEAS {
     struct Attestation {
-        bytes32 uid; // Unique identifier of the attestation. question: how do users, banks, finaciers get this uid?
+        bytes32 uid; // Unique identifier of the attestation. question: how do users, banks, finaciers get this uid? This is the attestationUid your escrow receives when someone calls releaseWithAttestation().
         bytes32 schema; // Schema of the attestation.
         uint64 time; // Timestamp of the attestation.
         uint64 expirationTime; // Timestamp of the attestation expiration.
