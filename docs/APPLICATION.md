@@ -6,11 +6,12 @@
 
 ## 1. Team background and technical credentials
 
-> **TODO (needs your input):** confirm names, roles, and any technical co-founder / contract auditor. Draft below based on the lead.
+Two founders, product and engineering.
 
-- **Lead — product & design.** Senior product designer, 7 years (4 in web3), shipping production-grade fintech and on-chain interfaces. Track record of taking regulated, technically dense financial products and making them legible to non-crypto operators — the exact skill Dhow's thesis depends on.
-- **Engineering.** Full-stack + Solidity. The prototype is a Next.js 16 app with custom Foundry-tested escrow contracts on Polygon (see §3, §6).
-- *Add: any banking / trade-finance domain advisor, and a smart-contract audit partner before mainnet.*
+- **John Wright-Nyingifa — Co-founder, product & design.** Senior product designer, 7 years (4 in web3), shipping production-grade fintech and on-chain interfaces. Track record of taking regulated, technically dense financial products and making them legible to non-crypto operators — the exact skill Dhow's thesis depends on.
+- **Kelechi Kizito — Co-founder, engineering.** Full-stack and Solidity. Built the on-chain layer end to end: custom, Foundry-tested escrow contracts on Polygon (`DhowEscrow`, OpenZeppelin-based mock USDC, Amoy testnet wiring — see §3, §6), verified settling real USDC on a live EVM chain, inside a Next.js 16 app.
+
+*Pre-mainnet, we add a smart-contract audit partner; a trade-finance / banking domain advisor is a target of the DIFC ecosystem introductions this challenge provides.*
 
 ---
 
@@ -75,7 +76,7 @@ A working prototype is built and verified:
 - Four surfaces (landing, Send, Cashflow Record, Capital) in a production-grade UI.
 - The full flywheel runs end to end: send a Proof-Lock → attest shipment proof → score crosses the eligibility threshold → working capital offer derives and unlocks → a third-party financier funds it.
 - **Verified on a live EVM chain:** the Proof-Lock locked 112,185.16 USDC into the escrow and released it to the supplier on attestation (real transactions, real settlement). Amoy deployment is a single funded-key step away (`docs/CHAIN.md`).
-- Live link: **https://dhow-pi.vercel.app**  ·  Repo: *[TODO: push to GambogeSplash]*
+- Live link: **https://dhow-pi.vercel.app**  ·  Repo: **https://github.com/GambogeSplash/dhow**
 
 ---
 
